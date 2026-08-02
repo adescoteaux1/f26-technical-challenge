@@ -1,6 +1,6 @@
 // Package scoring turns the accumulated SimStats into the metrics and
 // overall score reported to the client. Metrics are recomputed from the
-// running totals on every request, so GET /evaluation/{id} always reflects
+// running totals on every request, so GET /expedition/{id} always reflects
 // current progress rather than only a final snapshot.
 package scoring
 
@@ -22,28 +22,28 @@ const (
 	weightReliability = 0.15
 )
 
-// Compute derives the current Metrics + overall score from a simulation's
+// Compute derives the current Metrics + overall score from a cycle's
 // accumulated stats. Safe to call at any tick, including tick 0.
-func Compute(sim *models.Simulation) (models.Metrics, float64) {
-	s := sim.Stats
+func Compute(cycle *models.Cycle) (models.Metrics, float64) {
+	s := cycle.Stats
 
-	throughput := percent(s.CompletedJobs, s.TotalJobs, 0)
-	utilization := percent64(s.WorkerBusyResourceTicks, s.WorkerTotalResourceTicks, 0)
-	deadlineSuccess := percent(s.DeadlinesMet, s.DeadlinesMet+s.DeadlinesMissed, 100)
+	throughput := percent(s.ArrivedVoyages, s.TotalVoyages, 0)
+	utilization := percent64(s.GateBusyResourceTicks, s.GateTotalResourceTicks, 0)
+	arrivalSuccess := percent(s.ArrivalsOnTime, s.ArrivalsOnTime+s.ArrivalsLate, 100)
 	fairness := fairnessScore(s)
 	reliability := percent(s.ValidAssignments, s.ValidAssignments+s.InvalidAssignments, 100)
 
 	metrics := models.Metrics{
-		Throughput:        round1(throughput),
-		WorkerUtilization: round1(utilization),
-		DeadlineSuccess:   round1(deadlineSuccess),
-		Fairness:          round1(fairness),
-		Reliability:       round1(reliability),
+		Throughput:      round1(throughput),
+		GateUtilization: round1(utilization),
+		ArrivalSuccess:  round1(arrivalSuccess),
+		Fairness:        round1(fairness),
+		Reliability:     round1(reliability),
 	}
 
 	overall := weightThroughput*throughput +
 		weightUtilization*utilization +
-		weightDeadline*deadlineSuccess +
+		weightDeadline*arrivalSuccess +
 		weightFairness*fairness +
 		weightReliability*reliability
 
@@ -51,15 +51,15 @@ func Compute(sim *models.Simulation) (models.Metrics, float64) {
 }
 
 // fairnessScore penalizes large disparities in average queue wait time across
-// projects: a scheduler that always favors one project and starves another
+// origin hubs: a scheduler that always favors one hub and starves another
 // scores lower here even if throughput is high.
 func fairnessScore(s models.SimStats) float64 {
 	var avgWaits []float64
-	for project, completions := range s.ProjectCompletions {
-		if completions == 0 {
+	for hub, arrivals := range s.OriginHubArrivals {
+		if arrivals == 0 {
 			continue
 		}
-		avgWaits = append(avgWaits, float64(s.ProjectWaitTicks[project])/float64(completions))
+		avgWaits = append(avgWaits, float64(s.OriginHubWaitTicks[hub])/float64(arrivals))
 	}
 	if len(avgWaits) < 2 {
 		return 100
@@ -87,28 +87,28 @@ func fairnessScore(s models.SimStats) float64 {
 	return clamp(score, 0, 100)
 }
 
-// AggregateOverall averages per-simulation scores/metrics into the
-// evaluation-level result, matching the "average performance across every
-// simulation" scoring philosophy rather than weighting any one workload
+// AggregateOverall averages per-cycle scores/metrics into the
+// expedition-level result, matching the "average performance across every
+// cycle" scoring philosophy rather than weighting any one workload
 // more heavily than another.
-func AggregateOverall(sims []*models.Simulation) (models.Metrics, float64) {
-	if len(sims) == 0 {
+func AggregateOverall(cycles []*models.Cycle) (models.Metrics, float64) {
+	if len(cycles) == 0 {
 		return models.Metrics{}, 0
 	}
 	var m models.Metrics
 	var overall float64
-	for _, sim := range sims {
-		m.Throughput += sim.Metrics.Throughput
-		m.WorkerUtilization += sim.Metrics.WorkerUtilization
-		m.DeadlineSuccess += sim.Metrics.DeadlineSuccess
-		m.Fairness += sim.Metrics.Fairness
-		m.Reliability += sim.Metrics.Reliability
-		overall += sim.Score
+	for _, cycle := range cycles {
+		m.Throughput += cycle.Metrics.Throughput
+		m.GateUtilization += cycle.Metrics.GateUtilization
+		m.ArrivalSuccess += cycle.Metrics.ArrivalSuccess
+		m.Fairness += cycle.Metrics.Fairness
+		m.Reliability += cycle.Metrics.Reliability
+		overall += cycle.Score
 	}
-	n := float64(len(sims))
+	n := float64(len(cycles))
 	m.Throughput = round1(m.Throughput / n)
-	m.WorkerUtilization = round1(m.WorkerUtilization / n)
-	m.DeadlineSuccess = round1(m.DeadlineSuccess / n)
+	m.GateUtilization = round1(m.GateUtilization / n)
+	m.ArrivalSuccess = round1(m.ArrivalSuccess / n)
 	m.Fairness = round1(m.Fairness / n)
 	m.Reliability = round1(m.Reliability / n)
 	return m, round1(overall / n)

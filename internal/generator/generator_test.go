@@ -23,12 +23,12 @@ func TestGenerate_DeterministicForSameSeed(t *testing.T) {
 			t.Fatalf("%s: unexpected error: %v", profile, err)
 		}
 
-		if len(a.Jobs) != len(b.Jobs) || len(a.Workers) != len(b.Workers) {
-			t.Fatalf("%s: same seed produced different job/worker counts", profile)
+		if len(a.Voyages) != len(b.Voyages) || len(a.Gates) != len(b.Gates) {
+			t.Fatalf("%s: same seed produced different voyage/gate counts", profile)
 		}
-		for i := range a.Jobs {
-			if a.Jobs[i].RequiredCPU != b.Jobs[i].RequiredCPU || a.Jobs[i].EstimatedRuntime != b.Jobs[i].EstimatedRuntime {
-				t.Fatalf("%s: same seed produced different job %d parameters", profile, i)
+		for i := range a.Voyages {
+			if a.Voyages[i].RequiredPower != b.Voyages[i].RequiredPower || a.Voyages[i].EstimatedDuration != b.Voyages[i].EstimatedDuration {
+				t.Fatalf("%s: same seed produced different voyage %d parameters", profile, i)
 			}
 		}
 	}
@@ -36,34 +36,34 @@ func TestGenerate_DeterministicForSameSeed(t *testing.T) {
 
 func TestGenerate_AllProfilesProduceValidDAGs(t *testing.T) {
 	for _, profile := range AllProfiles {
-		sim, err := Generate(profile, 7)
+		cycle, err := Generate(profile, 7)
 		if err != nil {
 			t.Fatalf("%s: unexpected error: %v", profile, err)
 		}
-		if len(sim.Workers) == 0 {
-			t.Errorf("%s: expected at least one worker", profile)
+		if len(cycle.Gates) == 0 {
+			t.Errorf("%s: expected at least one gate", profile)
 		}
-		if len(sim.Jobs) == 0 {
-			t.Errorf("%s: expected at least one job", profile)
+		if len(cycle.Voyages) == 0 {
+			t.Errorf("%s: expected at least one voyage", profile)
 		}
 
-		for _, job := range sim.Jobs {
-			for _, depID := range job.Dependencies {
-				if depID >= job.ID {
-					t.Errorf("%s: job %d depends on %d, which is not an earlier job (graph must be acyclic)", profile, job.ID, depID)
+		for _, voyage := range cycle.Voyages {
+			for _, depID := range voyage.Prerequisites {
+				if depID >= voyage.ID {
+					t.Errorf("%s: voyage %d depends on %d, which is not an earlier voyage (graph must be acyclic)", profile, voyage.ID, depID)
 				}
 			}
-			if len(job.Dependencies) == 0 && job.Status != models.JobReady {
-				t.Errorf("%s: job %d has no dependencies but is not ready (status=%s)", profile, job.ID, job.Status)
+			if len(voyage.Prerequisites) == 0 && voyage.Status != models.VoyageBoarding {
+				t.Errorf("%s: voyage %d has no prerequisites but is not boarding (status=%s)", profile, voyage.ID, voyage.Status)
 			}
-			if len(job.Dependencies) > 0 && job.Status != models.JobBlocked {
-				t.Errorf("%s: job %d has dependencies but is not blocked (status=%s)", profile, job.ID, job.Status)
+			if len(voyage.Prerequisites) > 0 && voyage.Status != models.VoyageAwaitingTransfer {
+				t.Errorf("%s: voyage %d has prerequisites but is not awaiting transfer (status=%s)", profile, voyage.ID, voyage.Status)
 			}
-			if job.RequiredCPU <= 0 || job.RequiredMemory <= 0 {
-				t.Errorf("%s: job %d has non-positive resource requirements", profile, job.ID)
+			if voyage.RequiredPower <= 0 || voyage.RequiredContainment <= 0 {
+				t.Errorf("%s: voyage %d has non-positive resource requirements", profile, voyage.ID)
 			}
-			if job.EstimatedRuntime <= 0 {
-				t.Errorf("%s: job %d has non-positive estimated runtime", profile, job.ID)
+			if voyage.EstimatedDuration <= 0 {
+				t.Errorf("%s: voyage %d has non-positive estimated duration", profile, voyage.ID)
 			}
 		}
 	}

@@ -1,162 +1,125 @@
 package api
 
 import (
-	"encoding/json"
+	"context"
 	"errors"
 	"log/slog"
-	"net/http"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/adescoteaux1/generate-oracle/internal/evaluation"
-	"github.com/adescoteaux1/generate-oracle/internal/models"
 	"github.com/adescoteaux1/generate-oracle/internal/store"
 	"github.com/adescoteaux1/generate-oracle/internal/userauth"
 )
 
-// Server holds the dependencies HTTP handlers need.
+// Server holds the dependencies operation handlers need.
 type Server struct {
 	Store store.Store
 	Log   *slog.Logger
 }
 
-// register handles POST /register.
-func (s *Server) register(w http.ResponseWriter, r *http.Request) {
-	var req registerRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Email == "" || req.NUID == "" {
-		writeError(w, http.StatusBadRequest, "request body must include non-empty \"email\" and \"nuid\"")
-		return
-	}
-
-	user, err := userauth.Register(r.Context(), s.Store, req.Email, req.NUID)
+func (s *Server) registerHandler(ctx context.Context, input *registerInput) (*authOutput, error) {
+	user, err := userauth.Register(ctx, s.Store, input.Body.Email, input.Body.NUID)
 	if err != nil {
 		if errors.Is(err, store.ErrAlreadyExists) {
-			writeError(w, http.StatusConflict, "an account with that email already exists; use /login")
-			return
+			return nil, huma.Error409Conflict("an account with that email already exists; use /login")
 		}
 		s.Log.Error("register failed", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to register")
-		return
+		return nil, huma.Error500InternalServerError("failed to register")
 	}
-	writeJSON(w, http.StatusCreated, toAuthResponse(user))
+	resp := &authOutput{}
+	resp.Body = toAuthResponse(user)
+	return resp, nil
 }
 
-// login handles POST /login.
-func (s *Server) login(w http.ResponseWriter, r *http.Request) {
-	var req loginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Email == "" || req.NUID == "" {
-		writeError(w, http.StatusBadRequest, "request body must include non-empty \"email\" and \"nuid\"")
-		return
-	}
-
-	user, err := userauth.Login(r.Context(), s.Store, req.Email, req.NUID)
+func (s *Server) loginHandler(ctx context.Context, input *loginInput) (*authOutput, error) {
+	user, err := userauth.Login(ctx, s.Store, input.Body.Email, input.Body.NUID)
 	if err != nil {
 		if errors.Is(err, userauth.ErrInvalidCredentials) {
-			writeError(w, http.StatusUnauthorized, "email/nuid combination not found")
-			return
+			return nil, huma.Error401Unauthorized("email/nuid combination not found")
 		}
 		s.Log.Error("login failed", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to log in")
-		return
+		return nil, huma.Error500InternalServerError("failed to log in")
 	}
-	writeJSON(w, http.StatusOK, toAuthResponse(user))
+	resp := &authOutput{}
+	resp.Body = toAuthResponse(user)
+	return resp, nil
 }
 
-// history handles GET /me/evaluations.
-func (s *Server) history(w http.ResponseWriter, r *http.Request) {
-	user := userFromContext(r)
+func (s *Server) historyHandler(ctx context.Context, _ *historyInput) (*historyOutput, error) {
+	user := userFromContext(ctx)
 
-	summaries, err := s.Store.ListEvaluationsForUser(r.Context(), user.ID)
+	summaries, err := s.Store.ListExpeditionsForUser(ctx, user.ID)
 	if err != nil {
 		s.Log.Error("list history failed", "error", err)
-		writeError(w, http.StatusInternalServerError, "internal error")
-		return
+		return nil, huma.Error500InternalServerError("internal error")
 	}
 
-	items := make([]historyItem, 0, len(summaries))
+	resp := &historyOutput{Body: make([]historyItem, 0, len(summaries))}
 	for _, sum := range summaries {
-		items = append(items, toHistoryItem(sum))
+		resp.Body = append(resp.Body, toHistoryItem(sum))
 	}
-	writeJSON(w, http.StatusOK, items)
+	return resp, nil
 }
 
-// createEvaluation handles POST /evaluation.
-func (s *Server) createEvaluation(w http.ResponseWriter, r *http.Request) {
-	user := userFromContext(r)
+func (s *Server) createExpeditionHandler(ctx context.Context, _ *createExpeditionInput) (*createExpeditionOutput, error) {
+	user := userFromContext(ctx)
 
-	eval, err := evaluation.Create(r.Context(), s.Store, user.ID)
+	exp, err := evaluation.Create(ctx, s.Store, user.ID)
 	if err != nil {
-		s.Log.Error("create evaluation failed", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to create evaluation")
-		return
+		s.Log.Error("create expedition failed", "error", err)
+		return nil, huma.Error500InternalServerError("failed to create expedition")
 	}
-	writeJSON(w, http.StatusCreated, createEvaluationResponse{
-		EvaluationID:     eval.ID,
-		Simulation:       eval.CurrentSimulation,
-		TotalSimulations: eval.TotalSimulations,
-	})
+	resp := &createExpeditionOutput{}
+	resp.Body = createExpeditionResponse{
+		ExpeditionID: exp.ID,
+		Cycle:        exp.CurrentCycle,
+		TotalCycles:  exp.TotalCycles,
+	}
+	return resp, nil
 }
 
-// getEvaluation handles GET /evaluation/{id}.
-func (s *Server) getEvaluation(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	user := userFromContext(r)
+func (s *Server) getExpeditionHandler(ctx context.Context, input *getExpeditionInput) (*expeditionStateOutput, error) {
+	user := userFromContext(ctx)
 
-	row, sim, err := evaluation.GetState(r.Context(), s.Store, id, user.ID)
+	row, cycle, err := evaluation.GetState(ctx, s.Store, input.ID, user.ID)
 	if err != nil {
-		s.handleLookupError(w, err)
-		return
+		return nil, s.lookupError(err)
 	}
+
+	resp := &expeditionStateOutput{}
 	if row.Finished {
-		writeJSON(w, http.StatusOK, toFinishedResponse(row))
-		return
+		resp.Body = toFinishedResponse(row)
+	} else {
+		resp.Body = toCycleStateResponse(row.TotalCycles, cycle, nil)
 	}
-	writeJSON(w, http.StatusOK, toSimulationStateResponse(row.TotalSimulations, sim, nil))
+	return resp, nil
 }
 
-// submitSchedule handles POST /simulation/{id}/schedule.
-func (s *Server) submitSchedule(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	user := userFromContext(r)
+func (s *Server) submitCycleHandler(ctx context.Context, input *scheduleInput) (*expeditionStateOutput, error) {
+	user := userFromContext(ctx)
 
-	var assignments []models.Assignment
-	if err := json.NewDecoder(r.Body).Decode(&assignments); err != nil {
-		writeError(w, http.StatusBadRequest, "request body must be a JSON array of {workerId, jobId} assignments")
-		return
-	}
-
-	result, err := evaluation.Submit(r.Context(), s.Store, id, user.ID, assignments)
+	result, err := evaluation.Submit(ctx, s.Store, input.ID, user.ID, input.Body)
 	if err != nil {
-		s.handleLookupError(w, err)
-		return
+		return nil, s.lookupError(err)
 	}
 
-	if result.Simulation == nil {
-		writeJSON(w, http.StatusOK, toFinishedResponse(result.Evaluation))
-		return
+	resp := &expeditionStateOutput{}
+	if result.Cycle == nil {
+		resp.Body = toFinishedResponse(result.Expedition)
+	} else {
+		resp.Body = toCycleStateResponse(result.Expedition.TotalCycles, result.Cycle, result.Rejected)
 	}
-	writeJSON(w, http.StatusOK, toSimulationStateResponse(result.Evaluation.TotalSimulations, result.Simulation, result.Rejected))
+	return resp, nil
 }
 
-func (s *Server) handleLookupError(w http.ResponseWriter, err error) {
+func (s *Server) lookupError(err error) error {
 	if errors.Is(err, store.ErrNotFound) {
-		writeError(w, http.StatusNotFound, "evaluation not found")
-		return
+		return huma.Error404NotFound("expedition not found")
 	}
 	if errors.Is(err, evaluation.ErrForbidden) {
-		writeError(w, http.StatusForbidden, "you do not own this evaluation")
-		return
+		return huma.Error403Forbidden("you do not own this expedition")
 	}
 	s.Log.Error("request failed", "error", err)
-	writeError(w, http.StatusInternalServerError, "internal error")
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
-}
-
-func writeError(w http.ResponseWriter, status int, message string) {
-	writeJSON(w, status, map[string]string{"error": message})
+	return huma.Error500InternalServerError("internal error")
 }

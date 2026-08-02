@@ -7,22 +7,22 @@ import (
 	"github.com/adescoteaux1/generate-oracle/internal/models"
 )
 
-func newTestSim() *models.Simulation {
-	return &models.Simulation{
+func newTestCycle() *models.Cycle {
+	return &models.Cycle{
 		Tick: 0,
-		Workers: []*models.Worker{
-			{ID: 1, TotalCPU: 4, TotalMemory: 8, AvailableCPU: 4, AvailableMemory: 8, Available: true},
+		Gates: []*models.Gate{
+			{ID: 1, TotalPower: 4, TotalContainment: 8, AvailablePower: 4, AvailableContainment: 8, Operational: true},
 		},
-		Jobs: []*models.Job{
-			{ID: 1, Status: models.JobReady, RequiredCPU: 2, RequiredMemory: 2, ArrivalTick: 0},
+		Voyages: []*models.Voyage{
+			{ID: 1, Status: models.VoyageBoarding, RequiredPower: 2, RequiredContainment: 2, RequestedTick: 0},
 		},
 	}
 }
 
 func TestValidateAndApply_AcceptsValidAssignment(t *testing.T) {
-	sim := newTestSim()
+	cycle := newTestCycle()
 
-	result := ValidateAndApply(sim, []models.Assignment{{WorkerID: 1, JobID: 1}})
+	result := ValidateAndApply(cycle, []models.Assignment{{GateID: 1, VoyageID: 1}})
 
 	if len(result.Rejected) != 0 {
 		t.Fatalf("expected no rejections, got %+v", result.Rejected)
@@ -31,105 +31,105 @@ func TestValidateAndApply_AcceptsValidAssignment(t *testing.T) {
 		t.Fatalf("expected 1 accepted assignment, got %d", len(result.Accepted))
 	}
 
-	job := sim.Jobs[0]
-	if job.Status != models.JobRunning {
-		t.Errorf("expected job status running, got %s", job.Status)
+	voyage := cycle.Voyages[0]
+	if voyage.Status != models.VoyageInTransit {
+		t.Errorf("expected voyage status in transit, got %s", voyage.Status)
 	}
-	if job.AssignedWorker == nil || *job.AssignedWorker != 1 {
-		t.Errorf("expected job assigned to worker 1, got %v", job.AssignedWorker)
+	if voyage.AssignedGate == nil || *voyage.AssignedGate != 1 {
+		t.Errorf("expected voyage assigned to gate 1, got %v", voyage.AssignedGate)
 	}
 
-	worker := sim.Workers[0]
-	if worker.AvailableCPU != 2 {
-		t.Errorf("expected worker availableCPU 2, got %d", worker.AvailableCPU)
+	gate := cycle.Gates[0]
+	if gate.AvailablePower != 2 {
+		t.Errorf("expected gate availablePower 2, got %d", gate.AvailablePower)
 	}
-	if worker.AvailableMemory != 6 {
-		t.Errorf("expected worker availableMemory 6, got %d", worker.AvailableMemory)
+	if gate.AvailableContainment != 6 {
+		t.Errorf("expected gate availableContainment 6, got %d", gate.AvailableContainment)
 	}
-	if len(worker.RunningJobs) != 1 || worker.RunningJobs[0] != 1 {
-		t.Errorf("expected worker.RunningJobs = [1], got %v", worker.RunningJobs)
+	if len(gate.ActiveVoyages) != 1 || gate.ActiveVoyages[0] != 1 {
+		t.Errorf("expected gate.ActiveVoyages = [1], got %v", gate.ActiveVoyages)
 	}
 }
 
-func TestValidateAndApply_RejectsUnknownWorker(t *testing.T) {
-	sim := newTestSim()
-	result := ValidateAndApply(sim, []models.Assignment{{WorkerID: 99, JobID: 1}})
+func TestValidateAndApply_RejectsUnknownGate(t *testing.T) {
+	cycle := newTestCycle()
+	result := ValidateAndApply(cycle, []models.Assignment{{GateID: 99, VoyageID: 1}})
 	requireSingleRejection(t, result, "does not exist")
 }
 
-func TestValidateAndApply_RejectsUnknownJob(t *testing.T) {
-	sim := newTestSim()
-	result := ValidateAndApply(sim, []models.Assignment{{WorkerID: 1, JobID: 99}})
+func TestValidateAndApply_RejectsUnknownVoyage(t *testing.T) {
+	cycle := newTestCycle()
+	result := ValidateAndApply(cycle, []models.Assignment{{GateID: 1, VoyageID: 99}})
 	requireSingleRejection(t, result, "does not exist")
 }
 
-func TestValidateAndApply_RejectsBlockedJob(t *testing.T) {
-	sim := newTestSim()
-	sim.Jobs[0].Status = models.JobBlocked
-	sim.Jobs[0].Dependencies = []int{42}
+func TestValidateAndApply_RejectsAwaitingTransferVoyage(t *testing.T) {
+	cycle := newTestCycle()
+	cycle.Voyages[0].Status = models.VoyageAwaitingTransfer
+	cycle.Voyages[0].Prerequisites = []int{42}
 
-	result := ValidateAndApply(sim, []models.Assignment{{WorkerID: 1, JobID: 1}})
-	requireSingleRejection(t, result, "blocked")
+	result := ValidateAndApply(cycle, []models.Assignment{{GateID: 1, VoyageID: 1}})
+	requireSingleRejection(t, result, "awaiting prerequisite")
 }
 
-func TestValidateAndApply_RejectsAlreadyRunningJob(t *testing.T) {
-	sim := newTestSim()
-	running := 1
-	sim.Jobs[0].Status = models.JobRunning
-	sim.Jobs[0].AssignedWorker = &running
+func TestValidateAndApply_RejectsAlreadyInTransitVoyage(t *testing.T) {
+	cycle := newTestCycle()
+	inTransit := 1
+	cycle.Voyages[0].Status = models.VoyageInTransit
+	cycle.Voyages[0].AssignedGate = &inTransit
 
-	result := ValidateAndApply(sim, []models.Assignment{{WorkerID: 1, JobID: 1}})
-	requireSingleRejection(t, result, "already running")
+	result := ValidateAndApply(cycle, []models.Assignment{{GateID: 1, VoyageID: 1}})
+	requireSingleRejection(t, result, "already in transit")
 }
 
-func TestValidateAndApply_RejectsCompletedJob(t *testing.T) {
-	sim := newTestSim()
-	sim.Jobs[0].Status = models.JobCompleted
+func TestValidateAndApply_RejectsArrivedVoyage(t *testing.T) {
+	cycle := newTestCycle()
+	cycle.Voyages[0].Status = models.VoyageArrived
 
-	result := ValidateAndApply(sim, []models.Assignment{{WorkerID: 1, JobID: 1}})
-	requireSingleRejection(t, result, "already completed")
+	result := ValidateAndApply(cycle, []models.Assignment{{GateID: 1, VoyageID: 1}})
+	requireSingleRejection(t, result, "already arrived")
 }
 
-func TestValidateAndApply_RejectsInsufficientCPU(t *testing.T) {
-	sim := newTestSim()
-	sim.Jobs[0].RequiredCPU = 100
+func TestValidateAndApply_RejectsInsufficientPower(t *testing.T) {
+	cycle := newTestCycle()
+	cycle.Voyages[0].RequiredPower = 100
 
-	result := ValidateAndApply(sim, []models.Assignment{{WorkerID: 1, JobID: 1}})
-	requireSingleRejection(t, result, "insufficient CPU")
+	result := ValidateAndApply(cycle, []models.Assignment{{GateID: 1, VoyageID: 1}})
+	requireSingleRejection(t, result, "insufficient power")
 }
 
-func TestValidateAndApply_RejectsInsufficientMemory(t *testing.T) {
-	sim := newTestSim()
-	sim.Jobs[0].RequiredMemory = 100
+func TestValidateAndApply_RejectsInsufficientContainment(t *testing.T) {
+	cycle := newTestCycle()
+	cycle.Voyages[0].RequiredContainment = 100
 
-	result := ValidateAndApply(sim, []models.Assignment{{WorkerID: 1, JobID: 1}})
-	requireSingleRejection(t, result, "insufficient memory")
+	result := ValidateAndApply(cycle, []models.Assignment{{GateID: 1, VoyageID: 1}})
+	requireSingleRejection(t, result, "insufficient containment")
 }
 
-func TestValidateAndApply_RejectsUnavailableWorker(t *testing.T) {
-	sim := newTestSim()
-	sim.Workers[0].Available = false
+func TestValidateAndApply_RejectsOfflineGate(t *testing.T) {
+	cycle := newTestCycle()
+	cycle.Gates[0].Operational = false
 
-	result := ValidateAndApply(sim, []models.Assignment{{WorkerID: 1, JobID: 1}})
-	requireSingleRejection(t, result, "unavailable")
+	result := ValidateAndApply(cycle, []models.Assignment{{GateID: 1, VoyageID: 1}})
+	requireSingleRejection(t, result, "offline")
 }
 
-func TestValidateAndApply_RejectsJobNotYetArrived(t *testing.T) {
-	sim := newTestSim()
-	sim.Jobs[0].ArrivalTick = 5
-	sim.Tick = 0
+func TestValidateAndApply_RejectsVoyageNotYetRequested(t *testing.T) {
+	cycle := newTestCycle()
+	cycle.Voyages[0].RequestedTick = 5
+	cycle.Tick = 0
 
-	result := ValidateAndApply(sim, []models.Assignment{{WorkerID: 1, JobID: 1}})
-	requireSingleRejection(t, result, "has not arrived")
+	result := ValidateAndApply(cycle, []models.Assignment{{GateID: 1, VoyageID: 1}})
+	requireSingleRejection(t, result, "has not been requested")
 }
 
-func TestValidateAndApply_RejectsDuplicateJobInSameBatch(t *testing.T) {
-	sim := newTestSim()
-	sim.Workers = append(sim.Workers, &models.Worker{ID: 2, TotalCPU: 4, TotalMemory: 8, AvailableCPU: 4, AvailableMemory: 8, Available: true})
+func TestValidateAndApply_RejectsDuplicateVoyageInSameBatch(t *testing.T) {
+	cycle := newTestCycle()
+	cycle.Gates = append(cycle.Gates, &models.Gate{ID: 2, TotalPower: 4, TotalContainment: 8, AvailablePower: 4, AvailableContainment: 8, Operational: true})
 
-	result := ValidateAndApply(sim, []models.Assignment{
-		{WorkerID: 1, JobID: 1},
-		{WorkerID: 2, JobID: 1},
+	result := ValidateAndApply(cycle, []models.Assignment{
+		{GateID: 1, VoyageID: 1},
+		{GateID: 2, VoyageID: 1},
 	})
 
 	if len(result.Accepted) != 1 {
@@ -144,23 +144,23 @@ func TestValidateAndApply_RejectsDuplicateJobInSameBatch(t *testing.T) {
 }
 
 func TestValidateAndApply_ResourceAccumulationWithinBatch(t *testing.T) {
-	// A single worker with capacity for exactly one of two jobs submitted in
+	// A single gate with capacity for exactly one of two voyages submitted in
 	// the same batch: the second must be rejected for insufficient resources
-	// even though the worker started with enough capacity for either job
+	// even though the gate started with enough capacity for either voyage
 	// individually.
-	sim := &models.Simulation{
-		Workers: []*models.Worker{
-			{ID: 1, TotalCPU: 4, TotalMemory: 8, AvailableCPU: 4, AvailableMemory: 8, Available: true},
+	cycle := &models.Cycle{
+		Gates: []*models.Gate{
+			{ID: 1, TotalPower: 4, TotalContainment: 8, AvailablePower: 4, AvailableContainment: 8, Operational: true},
 		},
-		Jobs: []*models.Job{
-			{ID: 1, Status: models.JobReady, RequiredCPU: 3, RequiredMemory: 3},
-			{ID: 2, Status: models.JobReady, RequiredCPU: 3, RequiredMemory: 3},
+		Voyages: []*models.Voyage{
+			{ID: 1, Status: models.VoyageBoarding, RequiredPower: 3, RequiredContainment: 3},
+			{ID: 2, Status: models.VoyageBoarding, RequiredPower: 3, RequiredContainment: 3},
 		},
 	}
 
-	result := ValidateAndApply(sim, []models.Assignment{
-		{WorkerID: 1, JobID: 1},
-		{WorkerID: 1, JobID: 2},
+	result := ValidateAndApply(cycle, []models.Assignment{
+		{GateID: 1, VoyageID: 1},
+		{GateID: 1, VoyageID: 2},
 	})
 
 	if len(result.Accepted) != 1 {

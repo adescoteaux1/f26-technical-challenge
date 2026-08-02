@@ -20,88 +20,88 @@ type ScheduleResult struct {
 }
 
 // ValidateAndApply checks every submitted assignment against the current
-// simulation state (including resource usage from earlier assignments in the
+// cycle state (including resource usage from earlier assignments in the
 // same batch) and applies the ones that pass. Invalid assignments are
 // reported back with a reason but do not abort the whole batch.
-func ValidateAndApply(sim *models.Simulation, assignments []models.Assignment) ScheduleResult {
+func ValidateAndApply(cycle *models.Cycle, assignments []models.Assignment) ScheduleResult {
 	result := ScheduleResult{}
 
-	workersByID := make(map[int]*models.Worker, len(sim.Workers))
-	for _, w := range sim.Workers {
-		workersByID[w.ID] = w
+	gatesByID := make(map[int]*models.Gate, len(cycle.Gates))
+	for _, g := range cycle.Gates {
+		gatesByID[g.ID] = g
 	}
-	jobsByID := make(map[int]*models.Job, len(sim.Jobs))
-	for _, j := range sim.Jobs {
-		jobsByID[j.ID] = j
+	voyagesByID := make(map[int]*models.Voyage, len(cycle.Voyages))
+	for _, v := range cycle.Voyages {
+		voyagesByID[v.ID] = v
 	}
 
-	claimedJobs := make(map[int]bool) // jobs already assigned earlier in this same batch
+	claimedVoyages := make(map[int]bool) // voyages already assigned earlier in this same batch
 
 	for _, a := range assignments {
-		reason := validateOne(sim, workersByID, jobsByID, claimedJobs, a)
+		reason := validateOne(cycle, gatesByID, voyagesByID, claimedVoyages, a)
 		if reason != "" {
 			result.Rejected = append(result.Rejected, RejectedAssignment{Assignment: a, Reason: reason})
-			sim.Stats.InvalidAssignments++
+			cycle.Stats.InvalidAssignments++
 			continue
 		}
 
-		worker := workersByID[a.WorkerID]
-		job := jobsByID[a.JobID]
+		gate := gatesByID[a.GateID]
+		voyage := voyagesByID[a.VoyageID]
 
-		worker.AvailableCPU -= job.RequiredCPU
-		worker.AvailableMemory -= job.RequiredMemory
-		worker.RunningJobs = append(worker.RunningJobs, job.ID)
+		gate.AvailablePower -= voyage.RequiredPower
+		gate.AvailableContainment -= voyage.RequiredContainment
+		gate.ActiveVoyages = append(gate.ActiveVoyages, voyage.ID)
 
-		job.Status = models.JobRunning
-		job.AssignedWorker = &a.WorkerID
-		start := sim.Tick
-		job.StartTick = &start
+		voyage.Status = models.VoyageInTransit
+		voyage.AssignedGate = &a.GateID
+		start := cycle.Tick
+		voyage.DepartureTick = &start
 
-		claimedJobs[job.ID] = true
+		claimedVoyages[voyage.ID] = true
 		result.Accepted = append(result.Accepted, a)
-		sim.Stats.ValidAssignments++
+		cycle.Stats.ValidAssignments++
 	}
 
 	return result
 }
 
 func validateOne(
-	sim *models.Simulation,
-	workersByID map[int]*models.Worker,
-	jobsByID map[int]*models.Job,
-	claimedJobs map[int]bool,
+	cycle *models.Cycle,
+	gatesByID map[int]*models.Gate,
+	voyagesByID map[int]*models.Voyage,
+	claimedVoyages map[int]bool,
 	a models.Assignment,
 ) string {
-	worker, ok := workersByID[a.WorkerID]
+	gate, ok := gatesByID[a.GateID]
 	if !ok {
-		return fmt.Sprintf("worker %d does not exist", a.WorkerID)
+		return fmt.Sprintf("gate %d does not exist", a.GateID)
 	}
-	job, ok := jobsByID[a.JobID]
+	voyage, ok := voyagesByID[a.VoyageID]
 	if !ok {
-		return fmt.Sprintf("job %d does not exist", a.JobID)
+		return fmt.Sprintf("voyage %d does not exist", a.VoyageID)
 	}
-	if job.ArrivalTick > sim.Tick {
-		return fmt.Sprintf("job %d has not arrived yet (arrives tick %d, current tick %d)", job.ID, job.ArrivalTick, sim.Tick)
+	if voyage.RequestedTick > cycle.Tick {
+		return fmt.Sprintf("voyage %d has not been requested yet (requested tick %d, current tick %d)", voyage.ID, voyage.RequestedTick, cycle.Tick)
 	}
-	if claimedJobs[job.ID] {
-		return fmt.Sprintf("job %d was already assigned earlier in this same request", job.ID)
+	if claimedVoyages[voyage.ID] {
+		return fmt.Sprintf("voyage %d was already assigned earlier in this same request", voyage.ID)
 	}
-	switch job.Status {
-	case models.JobCompleted:
-		return fmt.Sprintf("job %d is already completed", job.ID)
-	case models.JobRunning:
-		return fmt.Sprintf("job %d is already running on worker %d", job.ID, *job.AssignedWorker)
-	case models.JobBlocked:
-		return fmt.Sprintf("job %d is blocked on incomplete dependencies %v", job.ID, job.Dependencies)
+	switch voyage.Status {
+	case models.VoyageArrived:
+		return fmt.Sprintf("voyage %d has already arrived", voyage.ID)
+	case models.VoyageInTransit:
+		return fmt.Sprintf("voyage %d is already in transit via gate %d", voyage.ID, *voyage.AssignedGate)
+	case models.VoyageAwaitingTransfer:
+		return fmt.Sprintf("voyage %d is awaiting prerequisite voyages %v", voyage.ID, voyage.Prerequisites)
 	}
-	if !worker.Available {
-		return fmt.Sprintf("worker %d is currently unavailable", worker.ID)
+	if !gate.Operational {
+		return fmt.Sprintf("gate %d is currently offline", gate.ID)
 	}
-	if job.RequiredCPU > worker.AvailableCPU {
-		return fmt.Sprintf("worker %d has insufficient CPU for job %d (needs %d, has %d)", worker.ID, job.ID, job.RequiredCPU, worker.AvailableCPU)
+	if voyage.RequiredPower > gate.AvailablePower {
+		return fmt.Sprintf("gate %d has insufficient power for voyage %d (needs %d, has %d)", gate.ID, voyage.ID, voyage.RequiredPower, gate.AvailablePower)
 	}
-	if job.RequiredMemory > worker.AvailableMemory {
-		return fmt.Sprintf("worker %d has insufficient memory for job %d (needs %d, has %d)", worker.ID, job.ID, job.RequiredMemory, worker.AvailableMemory)
+	if voyage.RequiredContainment > gate.AvailableContainment {
+		return fmt.Sprintf("gate %d has insufficient containment for voyage %d (needs %d, has %d)", gate.ID, voyage.ID, voyage.RequiredContainment, gate.AvailableContainment)
 	}
 	return ""
 }

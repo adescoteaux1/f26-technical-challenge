@@ -64,17 +64,17 @@ func registerUser(t *testing.T, baseURL, email string) string {
 	return token
 }
 
-func TestCreateEvaluation_RequiresAuth(t *testing.T) {
+func TestCreateExpedition_RequiresAuth(t *testing.T) {
 	srv := newTestServer()
 	defer srv.Close()
 
-	resp, body := doJSON(t, http.MethodPost, srv.URL+"/evaluation", "", nil)
+	resp, body := doJSON(t, http.MethodPost, srv.URL+"/expedition", "", nil)
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("expected 401 without a token, got %d (%v)", resp.StatusCode, body)
 	}
 }
 
-func TestRegisterLoginAndRunEvaluationFlow(t *testing.T) {
+func TestRegisterLoginAndRunExpeditionFlow(t *testing.T) {
 	srv := newTestServer()
 	defer srv.Close()
 
@@ -97,24 +97,24 @@ func TestRegisterLoginAndRunEvaluationFlow(t *testing.T) {
 	}
 	token = loginBody["token"].(string)
 
-	// Create an evaluation using the fresh token.
-	resp, createBody := doJSON(t, http.MethodPost, srv.URL+"/evaluation", token, nil)
+	// Create an expedition using the fresh token.
+	resp, createBody := doJSON(t, http.MethodPost, srv.URL+"/expedition", token, nil)
 	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("expected 201 creating evaluation, got %d (%v)", resp.StatusCode, createBody)
+		t.Fatalf("expected 201 creating expedition, got %d (%v)", resp.StatusCode, createBody)
 	}
-	evalID, _ := createBody["evaluationId"].(string)
-	if evalID == "" {
-		t.Fatalf("expected evaluationId in response, got %v", createBody)
+	expID, _ := createBody["expeditionId"].(string)
+	if expID == "" {
+		t.Fatalf("expected expeditionId in response, got %v", createBody)
 	}
 
 	// GET current state with the same token should succeed.
-	resp, stateBody := doJSON(t, http.MethodGet, srv.URL+"/evaluation/"+evalID, token, nil)
+	resp, stateBody := doJSON(t, http.MethodGet, srv.URL+"/expedition/"+expID, token, nil)
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200 fetching evaluation state, got %d (%v)", resp.StatusCode, stateBody)
+		t.Fatalf("expected 200 fetching expedition state, got %d (%v)", resp.StatusCode, stateBody)
 	}
 
-	// History should now include this evaluation.
-	histReq, err := http.NewRequest(http.MethodGet, srv.URL+"/me/evaluations", nil)
+	// History should now include this expedition.
+	histReq, err := http.NewRequest(http.MethodGet, srv.URL+"/me/expeditions", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
@@ -128,27 +128,27 @@ func TestRegisterLoginAndRunEvaluationFlow(t *testing.T) {
 	if err := json.NewDecoder(histResp.Body).Decode(&history); err != nil {
 		t.Fatalf("decode history: %v", err)
 	}
-	if len(history) != 1 || history[0]["evaluationId"] != evalID {
-		t.Fatalf("expected history to contain the new evaluation, got %v", history)
+	if len(history) != 1 || history[0]["expeditionId"] != expID {
+		t.Fatalf("expected history to contain the new expedition, got %v", history)
 	}
 }
 
-func TestOwnership_OtherUserCannotAccessEvaluation(t *testing.T) {
+func TestOwnership_OtherUserCannotAccessExpedition(t *testing.T) {
 	srv := newTestServer()
 	defer srv.Close()
 
 	tokenA := registerUser(t, srv.URL, "a@example.com")
 	tokenB := registerUser(t, srv.URL, "b@example.com")
 
-	_, createBody := doJSON(t, http.MethodPost, srv.URL+"/evaluation", tokenA, nil)
-	evalID := createBody["evaluationId"].(string)
+	_, createBody := doJSON(t, http.MethodPost, srv.URL+"/expedition", tokenA, nil)
+	expID := createBody["expeditionId"].(string)
 
-	resp, body := doJSON(t, http.MethodGet, srv.URL+"/evaluation/"+evalID, tokenB, nil)
+	resp, body := doJSON(t, http.MethodGet, srv.URL+"/expedition/"+expID, tokenB, nil)
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("expected 403 for a non-owner, got %d (%v)", resp.StatusCode, body)
 	}
 
-	resp, body = doJSON(t, http.MethodPost, srv.URL+"/simulation/"+evalID+"/schedule", tokenB, []any{})
+	resp, body = doJSON(t, http.MethodPost, srv.URL+"/cycle/"+expID+"/schedule", tokenB, []any{})
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("expected 403 scheduling as a non-owner, got %d (%v)", resp.StatusCode, body)
 	}

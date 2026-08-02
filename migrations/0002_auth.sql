@@ -8,9 +8,9 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE INDEX IF NOT EXISTS idx_users_token ON users(token);
 
--- Nullable: evaluations created before auth existed have no owner. Every
--- evaluation created going forward always sets this (enforced in the
+-- Nullable: expeditions created before auth existed have no owner. Every
+-- expedition created going forward always sets this (enforced in the
 -- application layer, not the schema, to avoid a destructive migration).
-ALTER TABLE evaluations ADD COLUMN IF NOT EXISTS user_id TEXT REFERENCES users(id);
+ALTER TABLE expeditions ADD COLUMN IF NOT EXISTS user_id TEXT REFERENCES users(id);
 
-CREATE INDEX IF NOT EXISTS idx_evaluations_user_id ON evaluations(user_id);
+CREATE INDEX IF NOT EXISTS idx_expeditions_user_id ON expeditions(user_id);

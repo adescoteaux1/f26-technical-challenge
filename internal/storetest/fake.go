@@ -2,7 +2,7 @@
 // by unit tests across packages (evaluation, userauth, ...) so none of them
 // need a live Postgres instance to exercise orchestration or auth logic.
 //
-// Simulations are round-tripped through JSON on every read/write, mirroring
+// Cycles are round-tripped through JSON on every read/write, mirroring
 // how PostgresStore actually persists them (as JSONB) rather than sharing
 // live pointers. Without this, a test holding a reference returned by one
 // call could observe mutations made by an unrelated later call — something
@@ -23,35 +23,35 @@ import (
 // FakeStore is a minimal, mutex-guarded in-memory implementation of store.Store.
 type FakeStore struct {
 	mu          sync.Mutex
-	evaluations map[string]*store.EvaluationRow
-	simulations map[string]map[int][]byte // JSON-encoded models.Simulation
+	expeditions map[string]*store.ExpeditionRow
+	cycles      map[string]map[int][]byte // JSON-encoded models.Cycle
 	users       map[string]models.User    // keyed by user ID
 }
 
 func New() *FakeStore {
 	return &FakeStore{
-		evaluations: map[string]*store.EvaluationRow{},
-		simulations: map[string]map[int][]byte{},
+		expeditions: map[string]*store.ExpeditionRow{},
+		cycles:      map[string]map[int][]byte{},
 		users:       map[string]models.User{},
 	}
 }
 
-func (f *FakeStore) CreateEvaluation(ctx context.Context, eval *models.Evaluation) error {
+func (f *FakeStore) CreateExpedition(ctx context.Context, exp *models.Expedition) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	f.evaluations[eval.ID] = &store.EvaluationRow{
-		ID: eval.ID, UserID: eval.UserID, TotalSimulations: eval.TotalSimulations, CurrentSimulation: eval.CurrentSimulation,
-		Finished: eval.Finished, OverallScore: eval.OverallScore, Metrics: eval.Metrics, ProfilePlan: eval.ProfilePlan,
+	f.expeditions[exp.ID] = &store.ExpeditionRow{
+		ID: exp.ID, UserID: exp.UserID, TotalCycles: exp.TotalCycles, CurrentCycle: exp.CurrentCycle,
+		Finished: exp.Finished, OverallScore: exp.OverallScore, Metrics: exp.Metrics, ProfilePlan: exp.ProfilePlan,
 	}
-	return f.saveSimulationLocked(eval.Simulations[0])
+	return f.saveCycleLocked(exp.Cycles[0])
 }
 
-func (f *FakeStore) GetEvaluation(ctx context.Context, id string) (*store.EvaluationRow, error) {
+func (f *FakeStore) GetExpedition(ctx context.Context, id string) (*store.ExpeditionRow, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	row, ok := f.evaluations[id]
+	row, ok := f.expeditions[id]
 	if !ok {
 		return nil, store.ErrNotFound
 	}
@@ -59,83 +59,83 @@ func (f *FakeStore) GetEvaluation(ctx context.Context, id string) (*store.Evalua
 	return &copyRow, nil
 }
 
-func (f *FakeStore) GetSimulation(ctx context.Context, evaluationID string, number int) (*models.Simulation, error) {
+func (f *FakeStore) GetCycle(ctx context.Context, expeditionID string, number int) (*models.Cycle, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	data, ok := f.simulations[evaluationID][number]
+	data, ok := f.cycles[expeditionID][number]
 	if !ok {
 		return nil, store.ErrNotFound
 	}
-	var sim models.Simulation
-	if err := json.Unmarshal(data, &sim); err != nil {
+	var cycle models.Cycle
+	if err := json.Unmarshal(data, &cycle); err != nil {
 		return nil, err
 	}
-	return &sim, nil
+	return &cycle, nil
 }
 
-func (f *FakeStore) SaveSimulation(ctx context.Context, sim *models.Simulation) error {
+func (f *FakeStore) SaveCycle(ctx context.Context, cycle *models.Cycle) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.saveSimulationLocked(sim)
+	return f.saveCycleLocked(cycle)
 }
 
-func (f *FakeStore) saveSimulationLocked(sim *models.Simulation) error {
-	data, err := json.Marshal(sim)
+func (f *FakeStore) saveCycleLocked(cycle *models.Cycle) error {
+	data, err := json.Marshal(cycle)
 	if err != nil {
 		return err
 	}
-	if f.simulations[sim.EvaluationID] == nil {
-		f.simulations[sim.EvaluationID] = map[int][]byte{}
+	if f.cycles[cycle.ExpeditionID] == nil {
+		f.cycles[cycle.ExpeditionID] = map[int][]byte{}
 	}
-	f.simulations[sim.EvaluationID][sim.Number] = data
+	f.cycles[cycle.ExpeditionID][cycle.Number] = data
 	return nil
 }
 
-func (f *FakeStore) AdvanceEvaluation(ctx context.Context, evaluationID string, nextSimulation int) error {
+func (f *FakeStore) AdvanceExpedition(ctx context.Context, expeditionID string, nextCycle int) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	f.evaluations[evaluationID].CurrentSimulation = nextSimulation
+	f.expeditions[expeditionID].CurrentCycle = nextCycle
 	return nil
 }
 
-func (f *FakeStore) FinishEvaluation(ctx context.Context, evaluationID string, overallScore float64, metrics models.Metrics) error {
+func (f *FakeStore) FinishExpedition(ctx context.Context, expeditionID string, overallScore float64, metrics models.Metrics) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	row := f.evaluations[evaluationID]
+	row := f.expeditions[expeditionID]
 	row.Finished = true
 	row.OverallScore = overallScore
 	row.Metrics = metrics
 	return nil
 }
 
-func (f *FakeStore) SimulationScores(ctx context.Context, evaluationID string) ([]store.SimScore, error) {
+func (f *FakeStore) CycleScores(ctx context.Context, expeditionID string) ([]store.CycleScore, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	var out []store.SimScore
-	for number, data := range f.simulations[evaluationID] {
-		var sim models.Simulation
-		if err := json.Unmarshal(data, &sim); err != nil {
+	var out []store.CycleScore
+	for number, data := range f.cycles[expeditionID] {
+		var cycle models.Cycle
+		if err := json.Unmarshal(data, &cycle); err != nil {
 			return nil, err
 		}
-		out = append(out, store.SimScore{Number: number, Score: sim.Score, Metrics: sim.Metrics, Finished: sim.Finished})
+		out = append(out, store.CycleScore{Number: number, Score: cycle.Score, Metrics: cycle.Metrics, Finished: cycle.Finished})
 	}
 	return out, nil
 }
 
-func (f *FakeStore) ListEvaluationsForUser(ctx context.Context, userID string) ([]store.EvaluationSummary, error) {
+func (f *FakeStore) ListExpeditionsForUser(ctx context.Context, userID string) ([]store.ExpeditionSummary, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	var out []store.EvaluationSummary
-	for _, row := range f.evaluations {
+	var out []store.ExpeditionSummary
+	for _, row := range f.expeditions {
 		if row.UserID != userID {
 			continue
 		}
-		out = append(out, store.EvaluationSummary{ID: row.ID, Finished: row.Finished, OverallScore: row.OverallScore, Metrics: row.Metrics})
+		out = append(out, store.ExpeditionSummary{ID: row.ID, Finished: row.Finished, OverallScore: row.OverallScore, Metrics: row.Metrics})
 	}
 	return out, nil
 }

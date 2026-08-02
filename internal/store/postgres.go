@@ -14,11 +14,11 @@ import (
 )
 
 // PostgresStore is the Supabase/Postgres-backed Store implementation. Full
-// simulation state is stored as a JSONB document per (evaluation, simulation
+// cycle state is stored as a JSONB document per (expedition, cycle
 // number) row rather than normalized across many tables: the state is deeply
-// nested (jobs, workers, per-project stats) and only ever read/written as a
+// nested (voyages, gates, per-hub stats) and only ever read/written as a
 // whole, so a document column is simpler than a join-heavy schema while
-// still living in a real relational database for evaluation-level queries.
+// still living in a real relational database for expedition-level queries.
 type PostgresStore struct {
 	pool *pgxpool.Pool
 }
@@ -44,52 +44,52 @@ func (s *PostgresStore) Close() {
 	s.pool.Close()
 }
 
-func (s *PostgresStore) CreateEvaluation(ctx context.Context, eval *models.Evaluation) error {
+func (s *PostgresStore) CreateExpedition(ctx context.Context, exp *models.Expedition) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(ctx)
 
-	metricsJSON, err := json.Marshal(eval.Metrics)
+	metricsJSON, err := json.Marshal(exp.Metrics)
 	if err != nil {
 		return err
 	}
-	profilePlanJSON, err := json.Marshal(eval.ProfilePlan)
+	profilePlanJSON, err := json.Marshal(exp.ProfilePlan)
 	if err != nil {
 		return err
 	}
 	_, err = tx.Exec(ctx, `
-		INSERT INTO evaluations (id, user_id, total_simulations, current_simulation, finished, overall_score, metrics, profile_plan)
+		INSERT INTO expeditions (id, user_id, total_cycles, current_cycle, finished, overall_score, metrics, profile_plan)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-		eval.ID, eval.UserID, eval.TotalSimulations, eval.CurrentSimulation, eval.Finished, eval.OverallScore, metricsJSON, profilePlanJSON)
+		exp.ID, exp.UserID, exp.TotalCycles, exp.CurrentCycle, exp.Finished, exp.OverallScore, metricsJSON, profilePlanJSON)
 	if err != nil {
-		return fmt.Errorf("insert evaluation: %w", err)
+		return fmt.Errorf("insert expedition: %w", err)
 	}
 
-	if len(eval.Simulations) != 1 {
-		return fmt.Errorf("CreateEvaluation expects exactly the first simulation attached, got %d", len(eval.Simulations))
+	if len(exp.Cycles) != 1 {
+		return fmt.Errorf("CreateExpedition expects exactly the first cycle attached, got %d", len(exp.Cycles))
 	}
-	if err := saveSimulationTx(ctx, tx, eval.Simulations[0]); err != nil {
+	if err := saveCycleTx(ctx, tx, exp.Cycles[0]); err != nil {
 		return err
 	}
 
 	return tx.Commit(ctx)
 }
 
-func (s *PostgresStore) GetEvaluation(ctx context.Context, id string) (*EvaluationRow, error) {
+func (s *PostgresStore) GetExpedition(ctx context.Context, id string) (*ExpeditionRow, error) {
 	row := s.pool.QueryRow(ctx, `
-		SELECT id, user_id, total_simulations, current_simulation, finished, overall_score, metrics, profile_plan
-		FROM evaluations WHERE id = $1`, id)
+		SELECT id, user_id, total_cycles, current_cycle, finished, overall_score, metrics, profile_plan
+		FROM expeditions WHERE id = $1`, id)
 
-	var r EvaluationRow
+	var r ExpeditionRow
 	var userID *string
 	var metricsJSON, profilePlanJSON []byte
-	if err := row.Scan(&r.ID, &userID, &r.TotalSimulations, &r.CurrentSimulation, &r.Finished, &r.OverallScore, &metricsJSON, &profilePlanJSON); err != nil {
+	if err := row.Scan(&r.ID, &userID, &r.TotalCycles, &r.CurrentCycle, &r.Finished, &r.OverallScore, &metricsJSON, &profilePlanJSON); err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, ErrNotFound
 		}
-		return nil, fmt.Errorf("query evaluation: %w", err)
+		return nil, fmt.Errorf("query expedition: %w", err)
 	}
 	if userID != nil {
 		r.UserID = *userID
@@ -103,111 +103,111 @@ func (s *PostgresStore) GetEvaluation(ctx context.Context, id string) (*Evaluati
 	return &r, nil
 }
 
-func (s *PostgresStore) GetSimulation(ctx context.Context, evaluationID string, number int) (*models.Simulation, error) {
+func (s *PostgresStore) GetCycle(ctx context.Context, expeditionID string, number int) (*models.Cycle, error) {
 	row := s.pool.QueryRow(ctx, `
-		SELECT state FROM simulations WHERE evaluation_id = $1 AND simulation_number = $2`,
-		evaluationID, number)
+		SELECT state FROM cycles WHERE expedition_id = $1 AND cycle_number = $2`,
+		expeditionID, number)
 
 	var stateJSON []byte
 	if err := row.Scan(&stateJSON); err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, ErrNotFound
 		}
-		return nil, fmt.Errorf("query simulation: %w", err)
+		return nil, fmt.Errorf("query cycle: %w", err)
 	}
-	var sim models.Simulation
-	if err := json.Unmarshal(stateJSON, &sim); err != nil {
-		return nil, fmt.Errorf("unmarshal simulation state: %w", err)
+	var cycle models.Cycle
+	if err := json.Unmarshal(stateJSON, &cycle); err != nil {
+		return nil, fmt.Errorf("unmarshal cycle state: %w", err)
 	}
-	return &sim, nil
+	return &cycle, nil
 }
 
-func (s *PostgresStore) SaveSimulation(ctx context.Context, sim *models.Simulation) error {
+func (s *PostgresStore) SaveCycle(ctx context.Context, cycle *models.Cycle) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(ctx)
 
-	if err := saveSimulationTx(ctx, tx, sim); err != nil {
+	if err := saveCycleTx(ctx, tx, cycle); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
 }
 
-func saveSimulationTx(ctx context.Context, tx pgx.Tx, sim *models.Simulation) error {
-	stateJSON, err := json.Marshal(sim)
+func saveCycleTx(ctx context.Context, tx pgx.Tx, cycle *models.Cycle) error {
+	stateJSON, err := json.Marshal(cycle)
 	if err != nil {
-		return fmt.Errorf("marshal simulation state: %w", err)
+		return fmt.Errorf("marshal cycle state: %w", err)
 	}
-	metricsJSON, err := json.Marshal(sim.Metrics)
+	metricsJSON, err := json.Marshal(cycle.Metrics)
 	if err != nil {
 		return err
 	}
 	_, err = tx.Exec(ctx, `
-		INSERT INTO simulations (evaluation_id, simulation_number, profile, seed, finished, score, metrics, state, updated_at)
+		INSERT INTO cycles (expedition_id, cycle_number, profile, seed, finished, score, metrics, state, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
-		ON CONFLICT (evaluation_id, simulation_number)
+		ON CONFLICT (expedition_id, cycle_number)
 		DO UPDATE SET finished = $5, score = $6, metrics = $7, state = $8, updated_at = now()`,
-		sim.EvaluationID, sim.Number, sim.Profile, sim.Seed, sim.Finished, sim.Score, metricsJSON, stateJSON)
+		cycle.ExpeditionID, cycle.Number, cycle.Profile, cycle.Seed, cycle.Finished, cycle.Score, metricsJSON, stateJSON)
 	if err != nil {
-		return fmt.Errorf("upsert simulation: %w", err)
+		return fmt.Errorf("upsert cycle: %w", err)
 	}
 	return nil
 }
 
-func (s *PostgresStore) AdvanceEvaluation(ctx context.Context, evaluationID string, nextSimulation int) error {
-	_, err := s.pool.Exec(ctx, `UPDATE evaluations SET current_simulation = $2 WHERE id = $1`, evaluationID, nextSimulation)
+func (s *PostgresStore) AdvanceExpedition(ctx context.Context, expeditionID string, nextCycle int) error {
+	_, err := s.pool.Exec(ctx, `UPDATE expeditions SET current_cycle = $2 WHERE id = $1`, expeditionID, nextCycle)
 	return err
 }
 
-func (s *PostgresStore) FinishEvaluation(ctx context.Context, evaluationID string, overallScore float64, metrics models.Metrics) error {
+func (s *PostgresStore) FinishExpedition(ctx context.Context, expeditionID string, overallScore float64, metrics models.Metrics) error {
 	metricsJSON, err := json.Marshal(metrics)
 	if err != nil {
 		return err
 	}
 	_, err = s.pool.Exec(ctx, `
-		UPDATE evaluations SET finished = TRUE, overall_score = $2, metrics = $3 WHERE id = $1`,
-		evaluationID, overallScore, metricsJSON)
+		UPDATE expeditions SET finished = TRUE, overall_score = $2, metrics = $3 WHERE id = $1`,
+		expeditionID, overallScore, metricsJSON)
 	return err
 }
 
-func (s *PostgresStore) SimulationScores(ctx context.Context, evaluationID string) ([]SimScore, error) {
+func (s *PostgresStore) CycleScores(ctx context.Context, expeditionID string) ([]CycleScore, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT simulation_number, score, metrics, finished
-		FROM simulations WHERE evaluation_id = $1 ORDER BY simulation_number`, evaluationID)
+		SELECT cycle_number, score, metrics, finished
+		FROM cycles WHERE expedition_id = $1 ORDER BY cycle_number`, expeditionID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var out []SimScore
+	var out []CycleScore
 	for rows.Next() {
-		var s SimScore
+		var c CycleScore
 		var metricsJSON []byte
-		if err := rows.Scan(&s.Number, &s.Score, &metricsJSON, &s.Finished); err != nil {
+		if err := rows.Scan(&c.Number, &c.Score, &metricsJSON, &c.Finished); err != nil {
 			return nil, err
 		}
-		if err := json.Unmarshal(metricsJSON, &s.Metrics); err != nil {
+		if err := json.Unmarshal(metricsJSON, &c.Metrics); err != nil {
 			return nil, err
 		}
-		out = append(out, s)
+		out = append(out, c)
 	}
 	return out, rows.Err()
 }
 
-func (s *PostgresStore) ListEvaluationsForUser(ctx context.Context, userID string) ([]EvaluationSummary, error) {
+func (s *PostgresStore) ListExpeditionsForUser(ctx context.Context, userID string) ([]ExpeditionSummary, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, finished, overall_score, metrics, created_at
-		FROM evaluations WHERE user_id = $1 ORDER BY created_at DESC`, userID)
+		FROM expeditions WHERE user_id = $1 ORDER BY created_at DESC`, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var out []EvaluationSummary
+	var out []ExpeditionSummary
 	for rows.Next() {
-		var e EvaluationSummary
+		var e ExpeditionSummary
 		var metricsJSON []byte
 		if err := rows.Scan(&e.ID, &e.Finished, &e.OverallScore, &metricsJSON, &e.CreatedAt); err != nil {
 			return nil, err

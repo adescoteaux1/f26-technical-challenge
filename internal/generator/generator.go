@@ -2,10 +2,10 @@
 //
 // Rather than generating pure noise, every workload is sampled from one of a
 // fixed set of profiles (see Profiles below). Each profile fixes the *shape*
-// of the difficulty (long dependency chains, sudden bursts, tight deadlines,
-// ...) while randomizing the specifics within that shape. This keeps
-// evaluations comparable across applicants: everyone who draws
-// "deadline_critical" faces the same kind of pressure, just with different
+// of the difficulty (long transfer chains, sudden surges, narrow arrival
+// windows, ...) while randomizing the specifics within that shape. This keeps
+// expeditions comparable across applicants: everyone who draws
+// "narrow_window" faces the same kind of pressure, just with different
 // numbers.
 package generator
 
@@ -16,29 +16,29 @@ import (
 	"github.com/adescoteaux1/generate-oracle/internal/models"
 )
 
-// Profile names, exported so the evaluation engine can sample from them.
+// Profile names, exported so the expedition engine can sample from them.
 const (
-	ProfileDependencyChains    = "dependency_chains"
-	ProfileBurstTraffic        = "burst_traffic"
-	ProfileHeavyCompute        = "heavy_compute"
-	ProfileDeadlineCritical    = "deadline_critical"
-	ProfileResourceConstrained = "resource_constrained"
-	ProfileBalanced            = "balanced"
+	ProfileTransferChains = "transfer_chains"
+	ProfileSurgeArrivals  = "surge_arrivals"
+	ProfileDeepRift       = "deep_rift"
+	ProfileNarrowWindow   = "narrow_window"
+	ProfileGateCongestion = "gate_congestion"
+	ProfileMixedTraffic   = "mixed_traffic"
 )
 
-// AllProfiles lists every profile the evaluation engine samples from.
+// AllProfiles lists every profile the expedition engine samples from.
 var AllProfiles = []string{
-	ProfileDependencyChains,
-	ProfileBurstTraffic,
-	ProfileHeavyCompute,
-	ProfileDeadlineCritical,
-	ProfileResourceConstrained,
-	ProfileBalanced,
+	ProfileTransferChains,
+	ProfileSurgeArrivals,
+	ProfileDeepRift,
+	ProfileNarrowWindow,
+	ProfileGateCongestion,
+	ProfileMixedTraffic,
 }
 
-var projectNames = []string{
-	"ai-inference", "report-gen", "image-processing", "email-delivery",
-	"analytics-pipeline", "db-sync",
+var originHubNames = []string{
+	"central-hub-alpha", "northern-gateway", "quantum-nexus", "eastern-node",
+	"southern-passage", "western-bridge",
 }
 
 // intRange is an inclusive [Min, Max] range sampled uniformly.
@@ -54,115 +54,115 @@ func (r intRange) sample(rng *rand.Rand) int {
 // config parameterizes one workload profile. Every profile shares the same
 // generation algorithm; only these knobs differ.
 type config struct {
-	Workers        intRange
-	WorkerCPU      intRange
-	WorkerMemory   intRange
-	Jobs           intRange
-	JobCPU         intRange
-	JobMemory      intRange
-	Runtime        intRange // ticks
-	ChainDepth     intRange // dependency chain length, 0/1 = no dependencies
-	ChainBranching intRange // extra parallel deps fanning into a chain node
-	DeadlineSlack  float64  // deadline = arrival + runtime*(chain depth) * slack; lower = tighter
-	ArrivalBurst   float64  // fraction of jobs that arrive at tick 0 vs trickling in
-	ArrivalWindow  int      // ticks over which the remaining jobs trickle in
-	FailureRate    float64  // probability per worker per tick of going unavailable
-	FailureTicks   intRange // how long an outage lasts
-	MaxTicks       int
+	Gates             intRange
+	GatePower         intRange
+	GateContainment   intRange
+	Voyages           intRange
+	VoyagePower       intRange
+	VoyageContainment intRange
+	Duration          intRange // ticks
+	ChainDepth        intRange // transfer chain length, 0/1 = no prerequisites
+	ChainBranching    intRange // extra parallel prerequisites fanning into a chain node
+	DeadlineSlack     float64  // deadline = requested + duration*(chain depth) * slack; lower = tighter
+	ArrivalBurst      float64  // fraction of voyages requested at tick 0 vs trickling in
+	ArrivalWindow     int      // ticks over which the remaining voyages trickle in
+	OutageRate        float64  // probability per gate per tick of going offline
+	OutageTicks       intRange // how long an outage lasts
+	MaxTicks          int
 }
 
 var configs = map[string]config{
-	ProfileDependencyChains: {
-		Workers: intRange{2, 4}, WorkerCPU: intRange{4, 8}, WorkerMemory: intRange{8, 16},
-		Jobs: intRange{30, 50}, JobCPU: intRange{1, 3}, JobMemory: intRange{1, 4},
-		Runtime: intRange{2, 6}, ChainDepth: intRange{5, 10}, ChainBranching: intRange{0, 1},
+	ProfileTransferChains: {
+		Gates: intRange{2, 4}, GatePower: intRange{4, 8}, GateContainment: intRange{8, 16},
+		Voyages: intRange{30, 50}, VoyagePower: intRange{1, 3}, VoyageContainment: intRange{1, 4},
+		Duration: intRange{2, 6}, ChainDepth: intRange{5, 10}, ChainBranching: intRange{0, 1},
 		DeadlineSlack: 2.5, ArrivalBurst: 1.0, ArrivalWindow: 0,
-		FailureRate: 0.01, FailureTicks: intRange{2, 5}, MaxTicks: 400,
+		OutageRate: 0.01, OutageTicks: intRange{2, 5}, MaxTicks: 400,
 	},
-	ProfileBurstTraffic: {
-		Workers: intRange{6, 10}, WorkerCPU: intRange{4, 8}, WorkerMemory: intRange{8, 16},
-		Jobs: intRange{400, 700}, JobCPU: intRange{1, 2}, JobMemory: intRange{1, 2},
-		Runtime: intRange{1, 3}, ChainDepth: intRange{0, 1}, ChainBranching: intRange{0, 0},
+	ProfileSurgeArrivals: {
+		Gates: intRange{6, 10}, GatePower: intRange{4, 8}, GateContainment: intRange{8, 16},
+		Voyages: intRange{400, 700}, VoyagePower: intRange{1, 2}, VoyageContainment: intRange{1, 2},
+		Duration: intRange{1, 3}, ChainDepth: intRange{0, 1}, ChainBranching: intRange{0, 0},
 		DeadlineSlack: 3.0, ArrivalBurst: 0.15, ArrivalWindow: 15,
-		FailureRate: 0.005, FailureTicks: intRange{1, 3}, MaxTicks: 300,
+		OutageRate: 0.005, OutageTicks: intRange{1, 3}, MaxTicks: 300,
 	},
-	ProfileHeavyCompute: {
-		Workers: intRange{3, 5}, WorkerCPU: intRange{8, 16}, WorkerMemory: intRange{16, 32},
-		Jobs: intRange{8, 16}, JobCPU: intRange{4, 12}, JobMemory: intRange{4, 16},
-		Runtime: intRange{15, 40}, ChainDepth: intRange{1, 3}, ChainBranching: intRange{0, 1},
+	ProfileDeepRift: {
+		Gates: intRange{3, 5}, GatePower: intRange{8, 16}, GateContainment: intRange{16, 32},
+		Voyages: intRange{8, 16}, VoyagePower: intRange{4, 12}, VoyageContainment: intRange{4, 16},
+		Duration: intRange{15, 40}, ChainDepth: intRange{1, 3}, ChainBranching: intRange{0, 1},
 		DeadlineSlack: 2.0, ArrivalBurst: 0.7, ArrivalWindow: 20,
-		FailureRate: 0.02, FailureTicks: intRange{3, 8}, MaxTicks: 500,
+		OutageRate: 0.02, OutageTicks: intRange{3, 8}, MaxTicks: 500,
 	},
-	ProfileDeadlineCritical: {
-		Workers: intRange{5, 8}, WorkerCPU: intRange{4, 8}, WorkerMemory: intRange{8, 16},
-		Jobs: intRange{60, 100}, JobCPU: intRange{1, 4}, JobMemory: intRange{1, 4},
-		Runtime: intRange{2, 8}, ChainDepth: intRange{1, 4}, ChainBranching: intRange{0, 2},
+	ProfileNarrowWindow: {
+		Gates: intRange{5, 8}, GatePower: intRange{4, 8}, GateContainment: intRange{8, 16},
+		Voyages: intRange{60, 100}, VoyagePower: intRange{1, 4}, VoyageContainment: intRange{1, 4},
+		Duration: intRange{2, 8}, ChainDepth: intRange{1, 4}, ChainBranching: intRange{0, 2},
 		DeadlineSlack: 1.15, ArrivalBurst: 0.5, ArrivalWindow: 30,
-		FailureRate: 0.01, FailureTicks: intRange{2, 4}, MaxTicks: 300,
+		OutageRate: 0.01, OutageTicks: intRange{2, 4}, MaxTicks: 300,
 	},
-	ProfileResourceConstrained: {
-		Workers: intRange{2, 3}, WorkerCPU: intRange{2, 4}, WorkerMemory: intRange{4, 8},
-		Jobs: intRange{80, 130}, JobCPU: intRange{1, 4}, JobMemory: intRange{1, 4},
-		Runtime: intRange{2, 8}, ChainDepth: intRange{1, 3}, ChainBranching: intRange{0, 2},
+	ProfileGateCongestion: {
+		Gates: intRange{2, 3}, GatePower: intRange{2, 4}, GateContainment: intRange{4, 8},
+		Voyages: intRange{80, 130}, VoyagePower: intRange{1, 4}, VoyageContainment: intRange{1, 4},
+		Duration: intRange{2, 8}, ChainDepth: intRange{1, 3}, ChainBranching: intRange{0, 2},
 		DeadlineSlack: 1.8, ArrivalBurst: 0.6, ArrivalWindow: 25,
-		FailureRate: 0.02, FailureTicks: intRange{3, 6}, MaxTicks: 450,
+		OutageRate: 0.02, OutageTicks: intRange{3, 6}, MaxTicks: 450,
 	},
-	ProfileBalanced: {
-		Workers: intRange{4, 7}, WorkerCPU: intRange{4, 10}, WorkerMemory: intRange{8, 20},
-		Jobs: intRange{60, 120}, JobCPU: intRange{1, 6}, JobMemory: intRange{1, 8},
-		Runtime: intRange{2, 15}, ChainDepth: intRange{0, 5}, ChainBranching: intRange{0, 2},
+	ProfileMixedTraffic: {
+		Gates: intRange{4, 7}, GatePower: intRange{4, 10}, GateContainment: intRange{8, 20},
+		Voyages: intRange{60, 120}, VoyagePower: intRange{1, 6}, VoyageContainment: intRange{1, 8},
+		Duration: intRange{2, 15}, ChainDepth: intRange{0, 5}, ChainBranching: intRange{0, 2},
 		DeadlineSlack: 2.0, ArrivalBurst: 0.5, ArrivalWindow: 30,
-		FailureRate: 0.012, FailureTicks: intRange{2, 6}, MaxTicks: 400,
+		OutageRate: 0.012, OutageTicks: intRange{2, 6}, MaxTicks: 400,
 	},
 }
 
-// Generate builds a fresh, deterministic-for-seed Simulation for the given profile.
-func Generate(profile string, seed int64) (*models.Simulation, error) {
+// Generate builds a fresh, deterministic-for-seed Cycle for the given profile.
+func Generate(profile string, seed int64) (*models.Cycle, error) {
 	cfg, ok := configs[profile]
 	if !ok {
 		return nil, fmt.Errorf("unknown workload profile %q", profile)
 	}
 	rng := rand.New(rand.NewSource(seed))
 
-	sim := &models.Simulation{
+	cycle := &models.Cycle{
 		Profile:  profile,
 		Seed:     seed,
 		Tick:     0,
 		MaxTicks: cfg.MaxTicks,
 		Stats: models.SimStats{
-			ProjectCompletions: map[string]int{},
-			ProjectWaitTicks:   map[string]int64{},
+			OriginHubArrivals:  map[string]int{},
+			OriginHubWaitTicks: map[string]int64{},
 		},
-		FailureRate:     cfg.FailureRate,
-		FailureTicksMin: cfg.FailureTicks.Min,
-		FailureTicksMax: cfg.FailureTicks.Max,
+		OutageRate:     cfg.OutageRate,
+		OutageTicksMin: cfg.OutageTicks.Min,
+		OutageTicksMax: cfg.OutageTicks.Max,
 	}
 
-	workerCount := cfg.Workers.sample(rng)
-	for i := 1; i <= workerCount; i++ {
-		cpu := cfg.WorkerCPU.sample(rng)
-		mem := cfg.WorkerMemory.sample(rng)
-		sim.Workers = append(sim.Workers, &models.Worker{
-			ID: i, TotalCPU: cpu, TotalMemory: mem,
-			AvailableCPU: cpu, AvailableMemory: mem, Available: true,
+	gateCount := cfg.Gates.sample(rng)
+	for i := 1; i <= gateCount; i++ {
+		power := cfg.GatePower.sample(rng)
+		containment := cfg.GateContainment.sample(rng)
+		cycle.Gates = append(cycle.Gates, &models.Gate{
+			ID: i, TotalPower: power, TotalContainment: containment,
+			AvailablePower: power, AvailableContainment: containment, Operational: true,
 		})
 	}
 
-	jobCount := cfg.Jobs.sample(rng)
-	sim.Jobs = generateJobs(rng, cfg, jobCount)
-	sim.Stats.TotalJobs = len(sim.Jobs)
+	voyageCount := cfg.Voyages.sample(rng)
+	cycle.Voyages = generateVoyages(rng, cfg, voyageCount)
+	cycle.Stats.TotalVoyages = len(cycle.Voyages)
 
-	return sim, nil
+	return cycle, nil
 }
 
-// generateJobs builds jobs in dependency-respecting layers: each job may only
-// depend on jobs generated in an earlier layer, which guarantees the
-// dependency graph is acyclic.
-func generateJobs(rng *rand.Rand, cfg config, jobCount int) []*models.Job {
-	jobs := make([]*models.Job, 0, jobCount)
+// generateVoyages builds voyages in prerequisite-respecting layers: each
+// voyage may only depend on voyages generated in an earlier layer, which
+// guarantees the prerequisite graph is acyclic.
+func generateVoyages(rng *rand.Rand, cfg config, voyageCount int) []*models.Voyage {
+	voyages := make([]*models.Voyage, 0, voyageCount)
 	nextID := 1
 
-	remaining := jobCount
+	remaining := voyageCount
 	for remaining > 0 {
 		depth := cfg.ChainDepth.sample(rng)
 		if depth < 1 {
@@ -181,26 +181,26 @@ func generateJobs(rng *rand.Rand, cfg config, jobCount int) []*models.Job {
 			}
 			var thisLayer []int
 			for i := 0; i < layerSize; i++ {
-				j := &models.Job{
-					ID:               nextID,
-					Project:          projectNames[rng.Intn(len(projectNames))],
-					Priority:         1 + rng.Intn(5),
-					EstimatedRuntime: cfg.Runtime.sample(rng),
-					RequiredCPU:      cfg.JobCPU.sample(rng),
-					RequiredMemory:   cfg.JobMemory.sample(rng),
-					Status:           models.JobBlocked,
+				v := &models.Voyage{
+					ID:                  nextID,
+					OriginHub:           originHubNames[rng.Intn(len(originHubNames))],
+					Priority:            1 + rng.Intn(5),
+					EstimatedDuration:   cfg.Duration.sample(rng),
+					RequiredPower:       cfg.VoyagePower.sample(rng),
+					RequiredContainment: cfg.VoyageContainment.sample(rng),
+					Status:              models.VoyageAwaitingTransfer,
 				}
-				j.RemainingRuntime = j.EstimatedRuntime
+				v.RemainingDuration = v.EstimatedDuration
 				if layer == 0 {
-					j.Dependencies = nil
+					v.Prerequisites = nil
 				} else {
-					j.Dependencies = append([]int{}, prevLayer...)
+					v.Prerequisites = append([]int{}, prevLayer...)
 				}
-				j.ArrivalTick = arrivalTick(rng, cfg, nextID, jobCount)
-				j.Deadline = j.ArrivalTick + int(float64(j.EstimatedRuntime*(layer+1))*cfg.DeadlineSlack) + 3
+				v.RequestedTick = requestedTick(rng, cfg, nextID, voyageCount)
+				v.ArrivalDeadline = v.RequestedTick + int(float64(v.EstimatedDuration*(layer+1))*cfg.DeadlineSlack) + 3
 				nextID++
-				thisLayer = append(thisLayer, j.ID)
-				jobs = append(jobs, j)
+				thisLayer = append(thisLayer, v.ID)
+				voyages = append(voyages, v)
 			}
 			prevLayer = thisLayer
 			remaining -= layerSize
@@ -210,21 +210,21 @@ func generateJobs(rng *rand.Rand, cfg config, jobCount int) []*models.Job {
 		}
 	}
 
-	// Jobs with no dependencies start out ready as soon as they arrive.
-	for _, j := range jobs {
-		if len(j.Dependencies) == 0 {
-			j.Status = models.JobReady
-			readyAt := j.ArrivalTick
-			j.ReadyTick = &readyAt
+	// Voyages with no prerequisites start out boarding as soon as they're requested.
+	for _, v := range voyages {
+		if len(v.Prerequisites) == 0 {
+			v.Status = models.VoyageBoarding
+			boardingAt := v.RequestedTick
+			v.BoardingTick = &boardingAt
 		}
 	}
-	return jobs
+	return voyages
 }
 
-// arrivalTick decides when a job becomes visible: a fraction of jobs land at
-// tick 0 (the initial backlog), the rest trickle in across ArrivalWindow to
-// simulate new work showing up mid-simulation.
-func arrivalTick(rng *rand.Rand, cfg config, jobIndex, totalJobs int) int {
+// requestedTick decides when a voyage becomes visible: a fraction of voyages
+// land at tick 0 (the initial backlog), the rest trickle in across
+// ArrivalWindow to simulate new travel requests showing up mid-cycle.
+func requestedTick(rng *rand.Rand, cfg config, voyageIndex, totalVoyages int) int {
 	if rng.Float64() < cfg.ArrivalBurst || cfg.ArrivalWindow <= 0 {
 		return 0
 	}

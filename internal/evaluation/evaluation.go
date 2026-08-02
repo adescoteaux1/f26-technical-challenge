@@ -1,4 +1,4 @@
-// Package evaluation is the Evaluation Engine: it orchestrates the
+// Package evaluation is the Expedition Engine: it orchestrates the
 // generator, simulation engine, validator, and scoring engine behind the
 // three REST endpoints. Handlers in internal/api call into this package and
 // never touch the generator/engine/scoring packages directly.
@@ -20,47 +20,47 @@ import (
 	"github.com/adescoteaux1/generate-oracle/internal/store"
 )
 
-// DefaultTotalSimulations mirrors the 8-simulation example in the Oracle
+// DefaultTotalCycles mirrors the 8-cycle example in the Oracle
 // spec. With 6 workload profiles, this guarantees every profile appears at
-// least once per evaluation, with 2 extra draws for additional variety.
-const DefaultTotalSimulations = 8
+// least once per expedition, with 2 extra draws for additional variety.
+const DefaultTotalCycles = 8
 
 // ErrForbidden is returned when the authenticated caller does not own the
-// evaluation they're trying to read or schedule against.
-var ErrForbidden = errors.New("you do not own this evaluation")
+// expedition they're trying to read or schedule against.
+var ErrForbidden = errors.New("you do not own this expedition")
 
-// Create starts a new evaluation owned by userID: it samples a profile order
-// across the 6 workload profiles, generates the first simulation, and
+// Create starts a new expedition owned by userID: it samples a profile order
+// across the 6 workload profiles, generates the first cycle, and
 // persists both.
-func Create(ctx context.Context, st store.Store, userID string) (*models.Evaluation, error) {
+func Create(ctx context.Context, st store.Store, userID string) (*models.Expedition, error) {
 	id := uuid.NewString()
-	profiles := sampleProfileOrder(DefaultTotalSimulations)
+	profiles := sampleProfileOrder(DefaultTotalCycles)
 
-	eval := &models.Evaluation{
-		ID:                id,
-		UserID:            userID,
-		TotalSimulations:  len(profiles),
-		CurrentSimulation: 1,
-		ProfilePlan:       profiles,
+	exp := &models.Expedition{
+		ID:           id,
+		UserID:       userID,
+		TotalCycles:  len(profiles),
+		CurrentCycle: 1,
+		ProfilePlan:  profiles,
 	}
 
-	sim, err := buildSimulation(id, 1, profiles[0])
+	cycle, err := buildCycle(id, 1, profiles[0])
 	if err != nil {
 		return nil, err
 	}
-	eval.Simulations = []*models.Simulation{sim}
+	exp.Cycles = []*models.Cycle{cycle}
 
-	if err := st.CreateEvaluation(ctx, eval); err != nil {
-		return nil, fmt.Errorf("persist new evaluation: %w", err)
+	if err := st.CreateExpedition(ctx, exp); err != nil {
+		return nil, fmt.Errorf("persist new expedition: %w", err)
 	}
-	return eval, nil
+	return exp, nil
 }
 
-// GetState loads the evaluation summary and, if not yet finished, the full
-// state of its current simulation. Returns ErrForbidden if userID does not
-// own the evaluation.
-func GetState(ctx context.Context, st store.Store, evaluationID, userID string) (*store.EvaluationRow, *models.Simulation, error) {
-	row, err := st.GetEvaluation(ctx, evaluationID)
+// GetState loads the expedition summary and, if not yet finished, the full
+// state of its current cycle. Returns ErrForbidden if userID does not
+// own the expedition.
+func GetState(ctx context.Context, st store.Store, expeditionID, userID string) (*store.ExpeditionRow, *models.Cycle, error) {
+	row, err := st.GetExpedition(ctx, expeditionID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -70,26 +70,26 @@ func GetState(ctx context.Context, st store.Store, evaluationID, userID string) 
 	if row.Finished {
 		return row, nil, nil
 	}
-	sim, err := st.GetSimulation(ctx, evaluationID, row.CurrentSimulation)
+	cycle, err := st.GetCycle(ctx, expeditionID, row.CurrentCycle)
 	if err != nil {
 		return nil, nil, err
 	}
-	return row, sim, nil
+	return row, cycle, nil
 }
 
 // SubmitResult carries everything the API layer needs to build a response.
 type SubmitResult struct {
-	Evaluation *store.EvaluationRow
-	Simulation *models.Simulation // nil once the whole evaluation is finished
+	Expedition *store.ExpeditionRow
+	Cycle      *models.Cycle // nil once the whole expedition is finished
 	Rejected   []engine.RejectedAssignment
 }
 
 // Submit validates and applies one batch of scheduling decisions against the
-// evaluation's current simulation, advances the simulation clock by one
-// tick, and — when that simulation finishes — either rolls over to the next
-// profile in the sequence or finalizes the evaluation's aggregate score.
-func Submit(ctx context.Context, st store.Store, evaluationID, userID string, assignments []models.Assignment) (*SubmitResult, error) {
-	row, err := st.GetEvaluation(ctx, evaluationID)
+// expedition's current cycle, advances the cycle clock by one
+// tick, and — when that cycle finishes — either rolls over to the next
+// profile in the sequence or finalizes the expedition's aggregate score.
+func Submit(ctx context.Context, st store.Store, expeditionID, userID string, assignments []models.Assignment) (*SubmitResult, error) {
+	row, err := st.GetExpedition(ctx, expeditionID)
 	if err != nil {
 		return nil, err
 	}
@@ -97,82 +97,82 @@ func Submit(ctx context.Context, st store.Store, evaluationID, userID string, as
 		return nil, ErrForbidden
 	}
 	if row.Finished {
-		return &SubmitResult{Evaluation: row}, nil
+		return &SubmitResult{Expedition: row}, nil
 	}
 
-	sim, err := st.GetSimulation(ctx, evaluationID, row.CurrentSimulation)
+	cycle, err := st.GetCycle(ctx, expeditionID, row.CurrentCycle)
 	if err != nil {
 		return nil, err
 	}
 
-	scheduleResult := engine.ValidateAndApply(sim, assignments)
-	engine.AdvanceTick(sim)
-	sim.Metrics, sim.Score = scoring.Compute(sim)
+	scheduleResult := engine.ValidateAndApply(cycle, assignments)
+	engine.AdvanceTick(cycle)
+	cycle.Metrics, cycle.Score = scoring.Compute(cycle)
 
-	if err := st.SaveSimulation(ctx, sim); err != nil {
-		return nil, fmt.Errorf("persist simulation: %w", err)
+	if err := st.SaveCycle(ctx, cycle); err != nil {
+		return nil, fmt.Errorf("persist cycle: %w", err)
 	}
 
-	if !sim.Finished {
-		row.CurrentSimulation = sim.Number
-		return &SubmitResult{Evaluation: row, Simulation: sim, Rejected: scheduleResult.Rejected}, nil
+	if !cycle.Finished {
+		row.CurrentCycle = cycle.Number
+		return &SubmitResult{Expedition: row, Cycle: cycle, Rejected: scheduleResult.Rejected}, nil
 	}
 
-	return advancePastFinishedSimulation(ctx, st, row, sim, scheduleResult.Rejected)
+	return advancePastFinishedCycle(ctx, st, row, cycle, scheduleResult.Rejected)
 }
 
-func advancePastFinishedSimulation(
-	ctx context.Context, st store.Store, row *store.EvaluationRow, finishedSim *models.Simulation, rejected []engine.RejectedAssignment,
+func advancePastFinishedCycle(
+	ctx context.Context, st store.Store, row *store.ExpeditionRow, finishedCycle *models.Cycle, rejected []engine.RejectedAssignment,
 ) (*SubmitResult, error) {
-	if row.CurrentSimulation >= row.TotalSimulations {
-		scores, err := st.SimulationScores(ctx, row.ID)
+	if row.CurrentCycle >= row.TotalCycles {
+		scores, err := st.CycleScores(ctx, row.ID)
 		if err != nil {
 			return nil, err
 		}
 		metrics, overall := aggregate(scores)
-		if err := st.FinishEvaluation(ctx, row.ID, overall, metrics); err != nil {
+		if err := st.FinishExpedition(ctx, row.ID, overall, metrics); err != nil {
 			return nil, err
 		}
 		row.Finished = true
 		row.OverallScore = overall
 		row.Metrics = metrics
-		return &SubmitResult{Evaluation: row, Rejected: rejected}, nil
+		return &SubmitResult{Expedition: row, Rejected: rejected}, nil
 	}
 
-	nextNumber := row.CurrentSimulation + 1
+	nextNumber := row.CurrentCycle + 1
 	profile := row.ProfilePlan[nextNumber-1]
-	nextSim, err := buildSimulation(row.ID, nextNumber, profile)
+	nextCycle, err := buildCycle(row.ID, nextNumber, profile)
 	if err != nil {
 		return nil, err
 	}
-	if err := st.SaveSimulation(ctx, nextSim); err != nil {
+	if err := st.SaveCycle(ctx, nextCycle); err != nil {
 		return nil, err
 	}
-	if err := st.AdvanceEvaluation(ctx, row.ID, nextNumber); err != nil {
+	if err := st.AdvanceExpedition(ctx, row.ID, nextNumber); err != nil {
 		return nil, err
 	}
-	row.CurrentSimulation = nextNumber
-	return &SubmitResult{Evaluation: row, Simulation: nextSim, Rejected: rejected}, nil
+	row.CurrentCycle = nextNumber
+	return &SubmitResult{Expedition: row, Cycle: nextCycle, Rejected: rejected}, nil
 }
 
-func aggregate(scores []store.SimScore) (models.Metrics, float64) {
-	sims := make([]*models.Simulation, 0, len(scores))
+func aggregate(scores []store.CycleScore) (models.Metrics, float64) {
+	cycles := make([]*models.Cycle, 0, len(scores))
 	for _, s := range scores {
-		sims = append(sims, &models.Simulation{Score: s.Score, Metrics: s.Metrics})
+		cycles = append(cycles, &models.Cycle{Score: s.Score, Metrics: s.Metrics})
 	}
-	return scoring.AggregateOverall(sims)
+	return scoring.AggregateOverall(cycles)
 }
 
-func buildSimulation(evaluationID string, number int, profile string) (*models.Simulation, error) {
+func buildCycle(expeditionID string, number int, profile string) (*models.Cycle, error) {
 	seed := rand.New(rand.NewSource(time.Now().UnixNano() + int64(number)*7919)).Int63()
-	sim, err := generator.Generate(profile, seed)
+	cycle, err := generator.Generate(profile, seed)
 	if err != nil {
 		return nil, err
 	}
-	sim.EvaluationID = evaluationID
-	sim.Number = number
-	sim.Metrics, sim.Score = scoring.Compute(sim)
-	return sim, nil
+	cycle.ExpeditionID = expeditionID
+	cycle.Number = number
+	cycle.Metrics, cycle.Score = scoring.Compute(cycle)
+	return cycle, nil
 }
 
 // sampleProfileOrder guarantees every one of the 6 profiles is drawn at

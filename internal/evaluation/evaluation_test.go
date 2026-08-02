@@ -12,149 +12,149 @@ const testUserID = "test-user-1"
 
 func TestCreate_SamplesEveryProfileAtLeastOnce(t *testing.T) {
 	st := storetest.New()
-	eval, err := Create(context.Background(), st, testUserID)
+	exp, err := Create(context.Background(), st, testUserID)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if eval.TotalSimulations != DefaultTotalSimulations {
-		t.Fatalf("expected %d total simulations, got %d", DefaultTotalSimulations, eval.TotalSimulations)
+	if exp.TotalCycles != DefaultTotalCycles {
+		t.Fatalf("expected %d total cycles, got %d", DefaultTotalCycles, exp.TotalCycles)
 	}
-	if len(eval.ProfilePlan) != DefaultTotalSimulations {
-		t.Fatalf("expected profile plan of length %d, got %d", DefaultTotalSimulations, len(eval.ProfilePlan))
+	if len(exp.ProfilePlan) != DefaultTotalCycles {
+		t.Fatalf("expected profile plan of length %d, got %d", DefaultTotalCycles, len(exp.ProfilePlan))
 	}
 
 	seen := map[string]bool{}
-	for _, p := range eval.ProfilePlan {
+	for _, p := range exp.ProfilePlan {
 		seen[p] = true
 	}
-	for _, want := range []string{"dependency_chains", "burst_traffic", "heavy_compute", "deadline_critical", "resource_constrained", "balanced"} {
+	for _, want := range []string{"transfer_chains", "surge_arrivals", "deep_rift", "narrow_window", "gate_congestion", "mixed_traffic"} {
 		if !seen[want] {
-			t.Errorf("expected profile plan to include %q at least once, plan=%v", want, eval.ProfilePlan)
+			t.Errorf("expected profile plan to include %q at least once, plan=%v", want, exp.ProfilePlan)
 		}
 	}
 }
 
 func TestSubmit_AdvancesTickAndPersistsState(t *testing.T) {
 	st := storetest.New()
-	eval, err := Create(context.Background(), st, testUserID)
+	exp, err := Create(context.Background(), st, testUserID)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	result, err := Submit(context.Background(), st, eval.ID, testUserID, nil)
+	result, err := Submit(context.Background(), st, exp.ID, testUserID, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Simulation == nil {
-		t.Fatalf("expected simulation still in progress")
+	if result.Cycle == nil {
+		t.Fatalf("expected cycle still in progress")
 	}
-	if result.Simulation.Tick != 1 {
-		t.Fatalf("expected tick 1 after one submit, got %d", result.Simulation.Tick)
+	if result.Cycle.Tick != 1 {
+		t.Fatalf("expected tick 1 after one submit, got %d", result.Cycle.Tick)
 	}
 }
 
-func TestSubmit_RollsOverToNextProfileWhenSimulationFinishes(t *testing.T) {
+func TestSubmit_RollsOverToNextProfileWhenCycleFinishes(t *testing.T) {
 	st := storetest.New()
-	eval, err := Create(context.Background(), st, testUserID)
+	exp, err := Create(context.Background(), st, testUserID)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Force the current simulation to look finished so the very next Submit
-	// call has to roll over into simulation 2's profile.
-	sim, err := st.GetSimulation(context.Background(), eval.ID, 1)
+	// Force the current cycle to look finished so the very next Submit
+	// call has to roll over into cycle 2's profile.
+	cycle, err := st.GetCycle(context.Background(), exp.ID, 1)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	sim.MaxTicks = 0 // AdvanceTick will finish it immediately
-	if err := st.SaveSimulation(context.Background(), sim); err != nil {
+	cycle.MaxTicks = 0 // AdvanceTick will finish it immediately
+	if err := st.SaveCycle(context.Background(), cycle); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	result, err := Submit(context.Background(), st, eval.ID, testUserID, nil)
+	result, err := Submit(context.Background(), st, exp.ID, testUserID, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Simulation == nil {
-		t.Fatalf("expected a new simulation to have started")
+	if result.Cycle == nil {
+		t.Fatalf("expected a new cycle to have started")
 	}
-	if result.Simulation.Number != 2 {
-		t.Fatalf("expected rollover to simulation 2, got %d", result.Simulation.Number)
+	if result.Cycle.Number != 2 {
+		t.Fatalf("expected rollover to cycle 2, got %d", result.Cycle.Number)
 	}
-	if result.Simulation.Profile != eval.ProfilePlan[1] {
-		t.Fatalf("expected simulation 2 to use planned profile %q, got %q", eval.ProfilePlan[1], result.Simulation.Profile)
+	if result.Cycle.Profile != exp.ProfilePlan[1] {
+		t.Fatalf("expected cycle 2 to use planned profile %q, got %q", exp.ProfilePlan[1], result.Cycle.Profile)
 	}
-	if result.Evaluation.CurrentSimulation != 2 {
-		t.Fatalf("expected evaluation.CurrentSimulation advanced to 2, got %d", result.Evaluation.CurrentSimulation)
+	if result.Expedition.CurrentCycle != 2 {
+		t.Fatalf("expected expedition.CurrentCycle advanced to 2, got %d", result.Expedition.CurrentCycle)
 	}
 }
 
-func TestSubmit_FinishesEvaluationAfterLastSimulation(t *testing.T) {
+func TestSubmit_FinishesExpeditionAfterLastCycle(t *testing.T) {
 	st := storetest.New()
-	eval, err := Create(context.Background(), st, testUserID)
+	exp, err := Create(context.Background(), st, testUserID)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Fast-forward straight to the final simulation slot.
-	if err := st.AdvanceEvaluation(context.Background(), eval.ID, eval.TotalSimulations); err != nil {
+	// Fast-forward straight to the final cycle slot.
+	if err := st.AdvanceExpedition(context.Background(), exp.ID, exp.TotalCycles); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	lastSim, err := buildSimulation(eval.ID, eval.TotalSimulations, eval.ProfilePlan[eval.TotalSimulations-1])
+	lastCycle, err := buildCycle(exp.ID, exp.TotalCycles, exp.ProfilePlan[exp.TotalCycles-1])
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	lastSim.MaxTicks = 0 // finishes on the next tick
-	if err := st.SaveSimulation(context.Background(), lastSim); err != nil {
+	lastCycle.MaxTicks = 0 // finishes on the next tick
+	if err := st.SaveCycle(context.Background(), lastCycle); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	result, err := Submit(context.Background(), st, eval.ID, testUserID, nil)
+	result, err := Submit(context.Background(), st, exp.ID, testUserID, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Simulation != nil {
-		t.Fatalf("expected no simulation in response once the evaluation is finished")
+	if result.Cycle != nil {
+		t.Fatalf("expected no cycle in response once the expedition is finished")
 	}
-	if !result.Evaluation.Finished {
-		t.Fatalf("expected evaluation to be finished")
+	if !result.Expedition.Finished {
+		t.Fatalf("expected expedition to be finished")
 	}
 }
 
-func TestSubmit_NoOpAfterEvaluationAlreadyFinished(t *testing.T) {
+func TestSubmit_NoOpAfterExpeditionAlreadyFinished(t *testing.T) {
 	st := storetest.New()
-	eval, err := Create(context.Background(), st, testUserID)
+	exp, err := Create(context.Background(), st, testUserID)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if err := st.FinishEvaluation(context.Background(), eval.ID, 88, models.Metrics{}); err != nil {
+	if err := st.FinishExpedition(context.Background(), exp.ID, 88, models.Metrics{}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	result, err := Submit(context.Background(), st, eval.ID, testUserID, nil)
+	result, err := Submit(context.Background(), st, exp.ID, testUserID, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Simulation != nil {
-		t.Fatalf("expected nil simulation for an already-finished evaluation")
+	if result.Cycle != nil {
+		t.Fatalf("expected nil cycle for an already-finished expedition")
 	}
-	if result.Evaluation.OverallScore != 88 {
-		t.Fatalf("expected finished evaluation's score preserved, got %v", result.Evaluation.OverallScore)
+	if result.Expedition.OverallScore != 88 {
+		t.Fatalf("expected finished expedition's score preserved, got %v", result.Expedition.OverallScore)
 	}
 }
 
 func TestSubmit_RejectsWrongOwner(t *testing.T) {
 	st := storetest.New()
-	eval, err := Create(context.Background(), st, testUserID)
+	exp, err := Create(context.Background(), st, testUserID)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if _, err := Submit(context.Background(), st, eval.ID, "someone-else", nil); err != ErrForbidden {
+	if _, err := Submit(context.Background(), st, exp.ID, "someone-else", nil); err != ErrForbidden {
 		t.Fatalf("expected ErrForbidden for a non-owner, got %v", err)
 	}
-	if _, _, err := GetState(context.Background(), st, eval.ID, "someone-else"); err != ErrForbidden {
+	if _, _, err := GetState(context.Background(), st, exp.ID, "someone-else"); err != ErrForbidden {
 		t.Fatalf("expected ErrForbidden for a non-owner, got %v", err)
 	}
 }

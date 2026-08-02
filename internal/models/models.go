@@ -4,86 +4,86 @@ package models
 
 import "time"
 
-// JobStatus tracks where a job is in its lifecycle.
-type JobStatus string
+// VoyageStatus tracks where a voyage is in its lifecycle.
+type VoyageStatus string
 
 const (
-	JobBlocked   JobStatus = "blocked" // waiting on dependencies
-	JobReady     JobStatus = "ready"   // dependencies satisfied, unassigned
-	JobRunning   JobStatus = "running" // assigned to a worker, executing
-	JobCompleted JobStatus = "completed"
+	VoyageAwaitingTransfer VoyageStatus = "awaiting_transfer" // waiting on prerequisites
+	VoyageBoarding         VoyageStatus = "boarding"          // prerequisites satisfied, unassigned
+	VoyageInTransit        VoyageStatus = "in_transit"        // assigned to a gate, executing
+	VoyageArrived          VoyageStatus = "arrived"
 )
 
-// Job is a unit of work submitted by a product team.
-type Job struct {
-	ID               int    `json:"id"`
-	Project          string `json:"project"`
-	Priority         int    `json:"priority"`         // 1 (low) - 5 (critical)
-	EstimatedRuntime int    `json:"estimatedRuntime"` // ticks required while running
-	RequiredCPU      int    `json:"requiredCpu"`
-	RequiredMemory   int    `json:"requiredMemory"`
-	Deadline         int    `json:"deadline"` // tick by which the job should complete
-	Dependencies     []int  `json:"dependencies"`
-	ArrivalTick      int    `json:"arrivalTick"` // tick at which the job becomes visible
+// Voyage is a unit of travel requested by a traveler.
+type Voyage struct {
+	ID                  int    `json:"id"`
+	OriginHub           string `json:"originHub"`
+	Priority            int    `json:"priority"`          // 1 (low) - 5 (critical)
+	EstimatedDuration   int    `json:"estimatedDuration"` // ticks required while in transit
+	RequiredPower       int    `json:"requiredPower"`
+	RequiredContainment int    `json:"requiredContainment"`
+	ArrivalDeadline     int    `json:"arrivalDeadline"` // tick by which the voyage should arrive
+	Prerequisites       []int  `json:"prerequisites"`
+	RequestedTick       int    `json:"requestedTick"` // tick at which the voyage becomes visible
 
-	Status           JobStatus `json:"status"`
-	RemainingRuntime int       `json:"remainingRuntime"`
-	AssignedWorker   *int      `json:"assignedWorker,omitempty"`
-	ReadyTick        *int      `json:"readyTick,omitempty"` // tick dependencies were satisfied
-	StartTick        *int      `json:"startTick,omitempty"`
-	CompletionTick   *int      `json:"completionTick,omitempty"`
+	Status            VoyageStatus `json:"status"`
+	RemainingDuration int          `json:"remainingDuration"`
+	AssignedGate      *int         `json:"assignedGate,omitempty"`
+	BoardingTick      *int         `json:"boardingTick,omitempty"` // tick prerequisites were satisfied
+	DepartureTick     *int         `json:"departureTick,omitempty"`
+	ArrivalTick       *int         `json:"arrivalTick,omitempty"`
 }
 
-// Worker executes jobs and has finite CPU/memory capacity.
-type Worker struct {
-	ID               int   `json:"id"`
-	TotalCPU         int   `json:"totalCpu"`
-	TotalMemory      int   `json:"totalMemory"`
-	AvailableCPU     int   `json:"availableCpu"`
-	AvailableMemory  int   `json:"availableMemory"`
-	RunningJobs      []int `json:"runningJobs"`
-	Available        bool  `json:"available"`
-	UnavailableUntil int   `json:"unavailableUntil"` // tick at which the worker comes back online; internal bookkeeping
+// Gate routes voyages and has finite power/containment capacity.
+type Gate struct {
+	ID                   int   `json:"id"`
+	TotalPower           int   `json:"totalPower"`
+	TotalContainment     int   `json:"totalContainment"`
+	AvailablePower       int   `json:"availablePower"`
+	AvailableContainment int   `json:"availableContainment"`
+	ActiveVoyages        []int `json:"activeVoyages"`
+	Operational          bool  `json:"operational"`
+	OfflineUntil         int   `json:"offlineUntil"` // tick at which the gate comes back online; internal bookkeeping
 }
 
 // Assignment is a single scheduling decision submitted by the client.
 type Assignment struct {
-	WorkerID int `json:"workerId"`
-	JobID    int `json:"jobId"`
+	GateID   int `json:"gateId" doc:"ID of the gate to send the voyage through"`
+	VoyageID int `json:"voyageId" doc:"ID of the voyage to assign"`
 }
 
 // Metrics is the set of category scores reported to the client.
 type Metrics struct {
-	Throughput        float64 `json:"throughput"`
-	WorkerUtilization float64 `json:"workerUtilization"`
-	DeadlineSuccess   float64 `json:"deadlineSuccess"`
-	Fairness          float64 `json:"fairness"`
-	Reliability       float64 `json:"reliability"`
+	Throughput      float64 `json:"throughput"`
+	GateUtilization float64 `json:"gateUtilization"`
+	ArrivalSuccess  float64 `json:"arrivalSuccess"`
+	Fairness        float64 `json:"fairness"`
+	Reliability     float64 `json:"reliability"`
 }
 
-// Simulation is one independently-scored workload within an evaluation.
+// Cycle is one independently-scored workload within an expedition.
 //
 // This struct is the full internal representation persisted to storage
 // between HTTP requests (the Oracle is stateless per-request). The public
 // API response shape is a separate DTO built by the api package, which
-// exposes only the fields the spec calls for (and hides jobs that haven't
-// arrived yet).
-type Simulation struct {
-	EvaluationID string    `json:"evaluationId"`
-	Number       int       `json:"simulation"`
+// exposes only the fields the spec calls for (and hides voyages that haven't
+// been requested yet).
+type Cycle struct {
+	ExpeditionID string    `json:"expeditionId"`
+	Number       int       `json:"cycle"`
 	Profile      string    `json:"profile"`
 	Seed         int64     `json:"seed"`
 	Tick         int       `json:"tick"`
 	MaxTicks     int       `json:"maxTicks"`
-	Workers      []*Worker `json:"workers"`
-	Jobs         []*Job    `json:"jobs"` // all jobs, including ones not yet arrived
+	Gates        []*Gate   `json:"gates"`
+	Voyages      []*Voyage `json:"voyages"` // all voyages, including ones not yet requested
 	Finished     bool      `json:"finished"`
 	Score        float64   `json:"score"`
 	Metrics      Metrics   `json:"metrics"`
 
-	FailureRate     float64 `json:"failureRate"`
-	FailureTicksMin int     `json:"failureTicksMin"`
-	FailureTicksMax int     `json:"failureTicksMax"`
+	OutageRate     float64 `json:"outageRate"`
+	OutageTicksMin int     `json:"outageTicksMin"`
+	OutageTicksMax int     `json:"outageTicksMax"`
 
 	// Stats accumulates running totals used by the scoring engine. It is
 	// internal bookkeeping, not part of the public API response.
@@ -92,41 +92,42 @@ type Simulation struct {
 
 // SimStats accumulates running totals used to compute metrics at any point in time.
 type SimStats struct {
-	TotalJobs                int              `json:"totalJobs"`
-	CompletedJobs            int              `json:"completedJobs"`
-	DeadlinesMet             int              `json:"deadlinesMet"`
-	DeadlinesMissed          int              `json:"deadlinesMissed"`
-	TotalWaitTicks           int64            `json:"totalWaitTicks"` // queue wait time summed across completed jobs
-	WorkerBusyResourceTicks  int64            `json:"workerBusyResourceTicks"`
-	WorkerTotalResourceTicks int64            `json:"workerTotalResourceTicks"`
-	InvalidAssignments       int              `json:"invalidAssignments"`
-	ValidAssignments         int              `json:"validAssignments"`
-	ProjectCompletions       map[string]int   `json:"projectCompletions"`
-	ProjectWaitTicks         map[string]int64 `json:"projectWaitTicks"`
+	TotalVoyages           int              `json:"totalVoyages"`
+	ArrivedVoyages         int              `json:"arrivedVoyages"`
+	ArrivalsOnTime         int              `json:"arrivalsOnTime"`
+	ArrivalsLate           int              `json:"arrivalsLate"`
+	TotalWaitTicks         int64            `json:"totalWaitTicks"` // queue wait time summed across arrived voyages
+	GateBusyResourceTicks  int64            `json:"gateBusyResourceTicks"`
+	GateTotalResourceTicks int64            `json:"gateTotalResourceTicks"`
+	InvalidAssignments     int              `json:"invalidAssignments"`
+	ValidAssignments       int              `json:"validAssignments"`
+	OriginHubArrivals      map[string]int   `json:"originHubArrivals"`
+	OriginHubWaitTicks     map[string]int64 `json:"originHubWaitTicks"`
 }
 
-// VisibleJob is the subset of a job's fields the scheduler is allowed to see:
-// jobs that have not yet arrived are omitted entirely from state responses.
-func (s *Simulation) VisibleJobs() []*Job {
-	visible := make([]*Job, 0, len(s.Jobs))
-	for _, j := range s.Jobs {
-		if j.ArrivalTick <= s.Tick {
-			visible = append(visible, j)
+// VisibleVoyages is the subset of a cycle's voyages the scheduler is allowed
+// to see: voyages that have not yet been requested are omitted entirely from
+// state responses.
+func (c *Cycle) VisibleVoyages() []*Voyage {
+	visible := make([]*Voyage, 0, len(c.Voyages))
+	for _, v := range c.Voyages {
+		if v.RequestedTick <= c.Tick {
+			visible = append(visible, v)
 		}
 	}
 	return visible
 }
 
-// Evaluation groups multiple independent simulations sampled across workload profiles.
-type Evaluation struct {
-	ID                string        `json:"evaluationId"`
-	UserID            string        `json:"-"` // owner; never returned to the client directly
-	TotalSimulations  int           `json:"totalSimulations"`
-	CurrentSimulation int           `json:"simulation"` // 1-indexed
-	Simulations       []*Simulation `json:"-"`
-	Finished          bool          `json:"finished"`
-	OverallScore      float64       `json:"overallScore"`
-	Metrics           Metrics       `json:"metrics"`
+// Expedition groups multiple independent cycles sampled across workload profiles.
+type Expedition struct {
+	ID           string   `json:"expeditionId"`
+	UserID       string   `json:"-"` // owner; never returned to the client directly
+	TotalCycles  int      `json:"totalCycles"`
+	CurrentCycle int      `json:"cycle"` // 1-indexed
+	Cycles       []*Cycle `json:"-"`
+	Finished     bool     `json:"finished"`
+	OverallScore float64  `json:"overallScore"`
+	Metrics      Metrics  `json:"metrics"`
 
 	// ProfilePlan is the full sequence of workload profiles sampled at
 	// creation time (see evaluation.sampleProfileOrder). It is internal
@@ -134,7 +135,7 @@ type Evaluation struct {
 	ProfilePlan []string `json:"-"`
 }
 
-// User is an applicant who has registered to run evaluations against the
+// User is an applicant who has registered to run expeditions against the
 // Oracle. NUID (Northeastern University ID) plus email double as the
 // registration credential pair; Token is the opaque bearer credential
 // issued at register/login time and required on every other endpoint.

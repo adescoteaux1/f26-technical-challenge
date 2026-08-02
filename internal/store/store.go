@@ -1,4 +1,4 @@
-// Package store persists evaluation, simulation, and user state between HTTP
+// Package store persists expedition, cycle, and user state between HTTP
 // requests. The Oracle is stateless per-request, so every tick's state must
 // round-trip through here.
 package store
@@ -11,34 +11,34 @@ import (
 	"github.com/adescoteaux1/generate-oracle/internal/models"
 )
 
-// ErrNotFound is returned when an evaluation, simulation, or user does not exist.
+// ErrNotFound is returned when an expedition, cycle, or user does not exist.
 var ErrNotFound = errors.New("not found")
 
 // ErrAlreadyExists is returned when registering an email that's already taken.
 var ErrAlreadyExists = errors.New("already exists")
 
-// EvaluationRow is the evaluation-level summary row (excludes full simulation state).
-type EvaluationRow struct {
-	ID                string
-	UserID            string
-	TotalSimulations  int
-	CurrentSimulation int
-	Finished          bool
-	OverallScore      float64
-	Metrics           models.Metrics
-	ProfilePlan       []string
+// ExpeditionRow is the expedition-level summary row (excludes full cycle state).
+type ExpeditionRow struct {
+	ID           string
+	UserID       string
+	TotalCycles  int
+	CurrentCycle int
+	Finished     bool
+	OverallScore float64
+	Metrics      models.Metrics
+	ProfilePlan  []string
 }
 
-// SimScore is the lightweight per-simulation result used for aggregation.
-type SimScore struct {
+// CycleScore is the lightweight per-cycle result used for aggregation.
+type CycleScore struct {
 	Number   int
 	Score    float64
 	Metrics  models.Metrics
 	Finished bool
 }
 
-// EvaluationSummary is one row of a user's evaluation history.
-type EvaluationSummary struct {
+// ExpeditionSummary is one row of a user's expedition history.
+type ExpeditionSummary struct {
 	ID           string
 	Finished     bool
 	OverallScore float64
@@ -46,33 +46,33 @@ type EvaluationSummary struct {
 	CreatedAt    time.Time
 }
 
-// Store is the persistence boundary the evaluation engine depends on. Kept
+// Store is the persistence boundary the expedition engine depends on. Kept
 // as an interface so the Postgres implementation can be swapped (e.g. for an
 // in-memory fake in tests) without touching orchestration logic.
 type Store interface {
-	// CreateEvaluation persists a brand new evaluation row and its first simulation.
-	CreateEvaluation(ctx context.Context, eval *models.Evaluation) error
+	// CreateExpedition persists a brand new expedition row and its first cycle.
+	CreateExpedition(ctx context.Context, exp *models.Expedition) error
 
-	// GetEvaluation returns the evaluation-level summary row.
-	GetEvaluation(ctx context.Context, id string) (*EvaluationRow, error)
+	// GetExpedition returns the expedition-level summary row.
+	GetExpedition(ctx context.Context, id string) (*ExpeditionRow, error)
 
-	// GetSimulation loads the full state of one simulation.
-	GetSimulation(ctx context.Context, evaluationID string, number int) (*models.Simulation, error)
+	// GetCycle loads the full state of one cycle.
+	GetCycle(ctx context.Context, expeditionID string, number int) (*models.Cycle, error)
 
-	// SaveSimulation upserts a simulation's full state plus its score/metrics summary.
-	SaveSimulation(ctx context.Context, sim *models.Simulation) error
+	// SaveCycle upserts a cycle's full state plus its score/metrics summary.
+	SaveCycle(ctx context.Context, cycle *models.Cycle) error
 
-	// AdvanceEvaluation moves the evaluation to the next simulation number.
-	AdvanceEvaluation(ctx context.Context, evaluationID string, nextSimulation int) error
+	// AdvanceExpedition moves the expedition to the next cycle number.
+	AdvanceExpedition(ctx context.Context, expeditionID string, nextCycle int) error
 
-	// FinishEvaluation marks the evaluation complete with its final aggregate score.
-	FinishEvaluation(ctx context.Context, evaluationID string, overallScore float64, metrics models.Metrics) error
+	// FinishExpedition marks the expedition complete with its final aggregate score.
+	FinishExpedition(ctx context.Context, expeditionID string, overallScore float64, metrics models.Metrics) error
 
-	// SimulationScores lists per-simulation results for aggregation.
-	SimulationScores(ctx context.Context, evaluationID string) ([]SimScore, error)
+	// CycleScores lists per-cycle results for aggregation.
+	CycleScores(ctx context.Context, expeditionID string) ([]CycleScore, error)
 
-	// ListEvaluationsForUser returns a user's evaluation history, newest first.
-	ListEvaluationsForUser(ctx context.Context, userID string) ([]EvaluationSummary, error)
+	// ListExpeditionsForUser returns a user's expedition history, newest first.
+	ListExpeditionsForUser(ctx context.Context, userID string) ([]ExpeditionSummary, error)
 
 	// CreateUser persists a new user. Returns ErrAlreadyExists if the email is taken.
 	CreateUser(ctx context.Context, user *models.User) error
