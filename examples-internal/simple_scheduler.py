@@ -1,0 +1,62 @@
+"""The "dumbest scheduler that still works" — a reference floor, not a target.
+
+Strategy: each tick, walk voyages in whatever order the Oracle returns them,
+and assign every "boarding" voyage to the first operational gate (in ID
+order) with enough spare power/containment. No prioritization, no fairness,
+no deadline awareness. This is intentionally the naive baseline described in
+CHALLENGE.md so reviewers have a concrete "here's what near-zero effort
+looks like" data point when calibrating scores.
+"""
+
+from __future__ import annotations
+
+import oracle_client as oracle
+
+EMAIL = "simple-scheduler@internal.local"
+NUID = "000000001"
+
+
+def decide_assignments(state: dict) -> list[dict]:
+    # Track remaining capacity locally so we don't over-commit a gate across
+    # multiple assignments within the same tick's batch.
+    remaining = {
+        g["id"]: (g["availablePower"], g["availableContainment"])
+        for g in state["gates"]
+        if g["operational"]
+    }
+
+    assignments = []
+    for voyage in state["voyages"]:
+        if voyage["status"] != "boarding":
+            continue
+        for gate_id, (power, containment) in remaining.items():
+            if power >= voyage["requiredPower"] and containment >= voyage["requiredContainment"]:
+                assignments.append({"gateId": gate_id, "voyageId": voyage["id"]})
+                remaining[gate_id] = (power - voyage["requiredPower"], containment - voyage["requiredContainment"])
+                break
+    return assignments
+
+
+def run() -> None:
+    token = oracle.login_or_register(EMAIL, NUID)
+    expedition = oracle.create_expedition(token)
+    expedition_id = expedition["expeditionId"]
+    print(f"expedition {expedition_id}: {expedition['totalCycles']} cycles")
+
+    state = oracle.get_expedition(token, expedition_id)
+    ticks = 0
+    while not state.get("finished"):
+        assignments = decide_assignments(state)
+        state = oracle.submit_cycle(token, expedition_id, assignments)
+        ticks += 1
+        if ticks % 200 == 0:
+            print(f"  ...cycle {state.get('cycle')}/{state.get('totalCycles')}, "
+                  f"tick {state.get('tick')}, profile={state.get('profile')}")
+
+    print(f"finished after {ticks} ticks")
+    print(f"overallScore: {state['overallScore']}")
+    print(f"metrics: {state['metrics']}")
+
+
+if __name__ == "__main__":
+    run()

@@ -19,8 +19,8 @@ Two decisions were made early and shaped everything else:
    (transfer chains, surge arrivals, deep rift, narrow window,
    gate congestion, mixed traffic), each with its own tuned ranges for
    gate count, voyage count, prerequisite depth, deadline slack, and outage
-   rate. Every expedition samples all six at least once, plus a couple of
-   extra draws, then shuffles the order. This was the one requirement I
+   rate. Every expedition repeats full passes through all six profiles as
+   many times as fit, then shuffles the order. This was the one requirement I
    held to non-negotiably: without it, two applicants could get wildly
    different difficulty by luck of the seed, which undermines the whole
    "average across cycles" scoring philosophy.
@@ -42,6 +42,21 @@ disguised as a simplification: the schema didn't actually guarantee what the
 comment claimed. I replaced it with an explicit `profile_plan` column
 persisted at creation time, and rollover just indexes into it. More schema,
 but the guarantee is real instead of asserted.
+
+A second, later change came directly from building the internal reference
+schedulers (see `examples-internal/`) and finding their scores hard to
+compare: two single evaluations aren't a fair A/B test if each one draws a
+different random mix of profiles, and the original sampling (6 guaranteed +
+N *fully random* extras) let one profile end up 2-3x overrepresented in one
+run versus another purely by chance — which is exactly what happened when
+comparing two scheduler strategies and one evaluation happened to draw the
+resource-starved profile twice. I increased cycles-per-expedition from 8 to
+16 and changed sampling to repeat full passes through all six profiles
+before drawing any partial/random leftovers, so the extra repetition can no
+longer concentrate unevenly. The tradeoff is a longer per-evaluation
+runtime, which matters for the "run, look at scores, iterate" loop the
+challenge is supposed to encourage — I judged the more stable, comparable
+score worth it, but it's a real cost, not a free win.
 
 I also went back and forth on `BoardingTick` vs. `RequestedTick` for the
 fairness metric's wait-time calculation. Using requested time would conflate

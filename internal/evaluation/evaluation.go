@@ -20,10 +20,12 @@ import (
 	"github.com/adescoteaux1/generate-oracle/internal/store"
 )
 
-// DefaultTotalCycles mirrors the 8-cycle example in the Oracle
-// spec. With 6 workload profiles, this guarantees every profile appears at
-// least once per expedition, with 2 extra draws for additional variety.
-const DefaultTotalCycles = 8
+// DefaultTotalCycles is how many cycles make up one expedition. With 6
+// workload profiles, 16 gives two full guaranteed passes through every
+// profile plus a partial third pass (see sampleProfileOrder) — enough
+// repetition that a single unlucky/lucky profile draw doesn't dominate the
+// averaged overallScore the way it could at lower cycle counts.
+const DefaultTotalCycles = 16
 
 // ErrForbidden is returned when the authenticated caller does not own the
 // expedition they're trying to read or schedule against.
@@ -175,17 +177,29 @@ func buildCycle(expeditionID string, number int, profile string) (*models.Cycle,
 	return cycle, nil
 }
 
-// sampleProfileOrder guarantees every one of the 6 profiles is drawn at
-// least once, then fills any remaining slots with additional random draws,
-// and finally shuffles the order so applicants can't infer what's coming.
+// sampleProfileOrder spreads `total` draws as evenly as possible across the
+// 6 profiles, then shuffles the order so applicants can't infer what's
+// coming. Full passes through every profile are repeated as many times as
+// fit, and only the leftover remainder is drawn (without replacement, so it
+// can't double up) from a shuffled partial pass. This is deliberately not
+// "6 guaranteed + N uniform-random draws": pure random draws for the extras
+// let one profile occasionally get 3-4x the representation of another by
+// chance, which is exactly the kind of profile-draw noise that made two
+// single evaluations hard to compare fairly.
 func sampleProfileOrder(total int) []string {
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	profiles := generator.AllProfiles
 
-	order := append([]string{}, generator.AllProfiles...)
-	for len(order) < total {
-		order = append(order, generator.AllProfiles[rng.Intn(len(generator.AllProfiles))])
+	order := make([]string, 0, total)
+	for len(order)+len(profiles) <= total {
+		order = append(order, profiles...)
 	}
-	order = order[:total]
+
+	if remaining := total - len(order); remaining > 0 {
+		partial := append([]string{}, profiles...)
+		rng.Shuffle(len(partial), func(i, j int) { partial[i], partial[j] = partial[j], partial[i] })
+		order = append(order, partial[:remaining]...)
+	}
 
 	rng.Shuffle(len(order), func(i, j int) { order[i], order[j] = order[j], order[i] })
 	return order

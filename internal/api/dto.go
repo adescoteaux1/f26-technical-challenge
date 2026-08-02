@@ -83,7 +83,7 @@ type expeditionStateResponse struct {
 	Cycle        int                  `json:"cycle,omitempty"`
 	TotalCycles  int                  `json:"totalCycles,omitempty"`
 	Profile      string               `json:"profile,omitempty"`
-	Tick         int                  `json:"tick,omitempty"`
+	Tick         int                  `json:"tick"`
 	MaxTicks     int                  `json:"maxTicks,omitempty"`
 	Gates        []*models.Gate       `json:"gates,omitempty"`
 	Voyages      []*models.Voyage     `json:"voyages,omitempty"`

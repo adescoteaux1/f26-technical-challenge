@@ -113,7 +113,7 @@ TOKEN=$(curl -s -X POST localhost:8080/register \
 
 # 1. Start an expedition
 curl -X POST localhost:8080/expedition -H "Authorization: Bearer $TOKEN"
-# {"expeditionId":"...","cycle":1,"totalCycles":8}
+# {"expeditionId":"...","cycle":1,"totalCycles":16}
 
 # 2. Poll current state
 curl localhost:8080/expedition/<id> -H "Authorization: Bearer $TOKEN"
@@ -183,10 +183,12 @@ a different scheduling concern:
 - **gate_congestion** — far more voyages than gates can absorb at once
 - **mixed_traffic** — a general mix of the above
 
-Each expedition samples all 6 profiles at least once, then fills the
-remaining slots (default 8 total cycles) with additional random draws,
-and shuffles the order — so difficulty is comparable across expeditions
-without anyone reliably drawing an "easy" run.
+Each expedition (16 cycles by default) repeats full passes through all 6
+profiles as many times as fit, draws any leftover cycles from a shuffled
+partial pass rather than fully at random, and shuffles the final order — so
+no single profile can end up over- or under-represented by luck, and
+difficulty is comparable across expeditions without anyone reliably drawing
+an "easy" run.
 
 ## Scoring
 

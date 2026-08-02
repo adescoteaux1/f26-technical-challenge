@@ -133,9 +133,9 @@ actually matter.
 ```bash
 TOKEN="..."   # from /register or /login
 
-# 1. Start an expedition (a full 8-cycle run through the network)
+# 1. Start an expedition (a full 16-cycle run through the network)
 curl -X POST <ORACLE_BASE_URL>/expedition -H "Authorization: Bearer $TOKEN"
-# -> {"expeditionId": "abc-123", "cycle": 1, "totalCycles": 8}
+# -> {"expeditionId": "abc-123", "cycle": 1, "totalCycles": 16}
 
 # 2. Look at the current state
 curl <ORACLE_BASE_URL>/expedition/abc-123 -H "Authorization: Bearer $TOKEN"
@@ -160,7 +160,7 @@ something real to write tests against before you start layering in
 strategy.
 
 **One `expeditionId` covers the whole expedition.** You don't track a
-separate ID per cycle — the Oracle runs 8 cycles back-to-back under one ID
+separate ID per cycle — the Oracle runs 16 cycles back-to-back under one ID
 and tells you when it moves on (see §6).
 
 ### The pieces you'll need to write
@@ -254,7 +254,7 @@ just advances the clock with no new assignments.
 
 ## 6. How an expedition is structured
 
-One expedition = **8 cycles**, run back to back under the same
+One expedition = **16 cycles**, run back to back under the same
 `expeditionId`. Each cycle is a fresh, independent transit scenario drawn
 from one of six fixed profiles, so you face a representative spread of
 conditions rather than one lucky or unlucky random draw:
@@ -268,16 +268,19 @@ conditions rather than one lucky or unlucky random draw:
 | `gate_congestion` | Far more voyages than your gates can absorb at once |
 | `mixed_traffic` | A general mix of all of the above |
 
-Every expedition guarantees all six profiles appear at least once (plus two
-extra random draws), shuffled. When one cycle finishes, the Oracle
-automatically starts the next — keep polling/scheduling against the same
-`expeditionId` throughout. When all 8 are done, you get:
+Every expedition repeats full passes through all six profiles as many times
+as fit (16 cycles = two full passes plus a partial third), draws any
+leftover cycles from a shuffled partial pass rather than fully at random,
+and shuffles the final order — so no single profile can dominate an
+expedition by luck. When one cycle finishes, the Oracle automatically
+starts the next — keep polling/scheduling against the same `expeditionId`
+throughout. When all 16 are done, you get:
 
 ```json
 {"finished": true, "overallScore": 74.0, "metrics": {"throughput": 94.4, "gateUtilization": 44.8, "arrivalSuccess": 68.6, "fairness": 61.7, "reliability": 100}}
 ```
 
-`overallScore` is the **average across all 8 cycles** — consistency across
+`overallScore` is the **average across all 16 cycles** — consistency across
 varied conditions matters more than a spiky best case.
 
 ---
