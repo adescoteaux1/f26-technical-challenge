@@ -14,17 +14,41 @@ const (
 	VoyageArrived          VoyageStatus = "arrived"
 )
 
+// VoyageLeg is one hop of a multi-hop corridor voyage. A voyage with no
+// Legs is a normal single-hop trip; a voyage with N legs must complete them
+// in order, through separate gate assignments, before it counts as arrived.
+type VoyageLeg struct {
+	RequiredPower       int `json:"requiredPower"`
+	RequiredContainment int `json:"requiredContainment"`
+	EstimatedDuration   int `json:"estimatedDuration"`
+}
+
 // Voyage is a unit of travel requested by a traveler.
 type Voyage struct {
 	ID                  int    `json:"id"`
 	OriginHub           string `json:"originHub"`
 	Priority            int    `json:"priority"`          // 1 (low) - 5 (critical)
-	EstimatedDuration   int    `json:"estimatedDuration"` // ticks required while in transit
+	EstimatedDuration   int    `json:"estimatedDuration"` // ticks required while in transit (current leg, if multi-hop)
 	RequiredPower       int    `json:"requiredPower"`
 	RequiredContainment int    `json:"requiredContainment"`
-	ArrivalDeadline     int    `json:"arrivalDeadline"` // tick by which the voyage should arrive
+	ArrivalDeadline     int    `json:"arrivalDeadline"` // tick by which the voyage should arrive (whole trip)
 	Prerequisites       []int  `json:"prerequisites"`
 	RequestedTick       int    `json:"requestedTick"` // tick at which the voyage becomes visible
+
+	// Legs is the full planned corridor for a multi-hop voyage (empty for a
+	// normal single-hop voyage). LegIndex is which leg is current: the
+	// top-level RequiredPower/RequiredContainment/EstimatedDuration/
+	// RemainingDuration always describe *that* leg, so the rest of the
+	// engine (validator, resource accounting, gate-outage requeueing) needs
+	// no special multi-hop handling — it only ever sees "the current leg."
+	Legs     []VoyageLeg `json:"legs,omitempty"`
+	LegIndex int         `json:"legIndex,omitempty"`
+
+	// SLADeadline is non-nil only for voyages whose OriginHub is one of the
+	// cycle's PremiumHubs: a tighter internal deadline than ArrivalDeadline,
+	// used only for the slaCompliance metric (missing it doesn't reject
+	// scheduling, unlike ArrivalDeadline which is purely informational too).
+	SLADeadline *int `json:"slaDeadline,omitempty"`
 
 	Status            VoyageStatus `json:"status"`
 	RemainingDuration int          `json:"remainingDuration"`
@@ -59,6 +83,7 @@ type Metrics struct {
 	ArrivalSuccess  float64 `json:"arrivalSuccess"`
 	Fairness        float64 `json:"fairness"`
 	Reliability     float64 `json:"reliability"`
+	SLACompliance   float64 `json:"slaCompliance"`
 }
 
 // Cycle is one independently-scored workload within an expedition.
@@ -80,6 +105,10 @@ type Cycle struct {
 	Finished     bool      `json:"finished"`
 	Score        float64   `json:"score"`
 	Metrics      Metrics   `json:"metrics"`
+
+	// PremiumHubs are the origin hubs paying for a tighter SLA this cycle
+	// (see Voyage.SLADeadline and Metrics.SLACompliance).
+	PremiumHubs []string `json:"premiumHubs,omitempty"`
 
 	OutageRate     float64 `json:"outageRate"`
 	OutageTicksMin int     `json:"outageTicksMin"`
@@ -103,6 +132,8 @@ type SimStats struct {
 	ValidAssignments       int              `json:"validAssignments"`
 	OriginHubArrivals      map[string]int   `json:"originHubArrivals"`
 	OriginHubWaitTicks     map[string]int64 `json:"originHubWaitTicks"`
+	PremiumArrivalsOnTime  int              `json:"premiumArrivalsOnTime"`
+	PremiumArrivalsLate    int              `json:"premiumArrivalsLate"`
 }
 
 // VisibleVoyages is the subset of a cycle's voyages the scheduler is allowed

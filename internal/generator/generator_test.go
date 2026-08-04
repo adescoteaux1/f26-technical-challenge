@@ -68,3 +68,80 @@ func TestGenerate_AllProfilesProduceValidDAGs(t *testing.T) {
 		}
 	}
 }
+
+func TestGenerate_MultiLegVoyagesAreWellFormed(t *testing.T) {
+	sawAtLeastOneCorridor := false
+
+	for _, profile := range AllProfiles {
+		cycle, err := Generate(profile, 99)
+		if err != nil {
+			t.Fatalf("%s: unexpected error: %v", profile, err)
+		}
+		for _, v := range cycle.Voyages {
+			if len(v.Legs) == 0 {
+				continue // single-hop voyage, nothing corridor-specific to check
+			}
+			sawAtLeastOneCorridor = true
+
+			if len(v.Legs) < 2 {
+				t.Errorf("%s: voyage %d has Legs but fewer than 2 of them (%d)", profile, v.ID, len(v.Legs))
+			}
+			if v.LegIndex != 0 {
+				t.Errorf("%s: voyage %d should start at LegIndex 0, got %d", profile, v.ID, v.LegIndex)
+			}
+			first := v.Legs[0]
+			if v.RequiredPower != first.RequiredPower || v.RequiredContainment != first.RequiredContainment {
+				t.Errorf("%s: voyage %d's top-level requirements don't match its first leg", profile, v.ID)
+			}
+			if v.EstimatedDuration != first.EstimatedDuration || v.RemainingDuration != first.EstimatedDuration {
+				t.Errorf("%s: voyage %d's duration fields don't match its first leg", profile, v.ID)
+			}
+			for i, leg := range v.Legs {
+				if leg.RequiredPower <= 0 || leg.RequiredContainment <= 0 || leg.EstimatedDuration <= 0 {
+					t.Errorf("%s: voyage %d leg %d has a non-positive field: %+v", profile, v.ID, i, leg)
+				}
+			}
+			if v.ArrivalDeadline <= v.RequestedTick {
+				t.Errorf("%s: voyage %d has a corridor deadline that isn't after its requested tick", profile, v.ID)
+			}
+		}
+	}
+
+	if !sawAtLeastOneCorridor {
+		t.Fatal("expected at least one multi-leg corridor voyage across all profiles at this seed")
+	}
+}
+
+func TestGenerate_PremiumHubsGetTighterSLADeadlines(t *testing.T) {
+	for _, profile := range AllProfiles {
+		cycle, err := Generate(profile, 7)
+		if err != nil {
+			t.Fatalf("%s: unexpected error: %v", profile, err)
+		}
+
+		if len(cycle.PremiumHubs) == 0 {
+			t.Fatalf("%s: expected at least one premium hub to be designated", profile)
+		}
+		premium := make(map[string]bool, len(cycle.PremiumHubs))
+		for _, hub := range cycle.PremiumHubs {
+			premium[hub] = true
+		}
+
+		for _, v := range cycle.Voyages {
+			if premium[v.OriginHub] {
+				if v.SLADeadline == nil {
+					t.Errorf("%s: voyage %d from premium hub %q has no SLADeadline", profile, v.ID, v.OriginHub)
+					continue
+				}
+				if *v.SLADeadline > v.ArrivalDeadline {
+					t.Errorf("%s: voyage %d's SLA deadline (%d) is looser than its arrival deadline (%d)", profile, v.ID, *v.SLADeadline, v.ArrivalDeadline)
+				}
+				if *v.SLADeadline < v.RequestedTick {
+					t.Errorf("%s: voyage %d's SLA deadline (%d) is before it was even requested (%d)", profile, v.ID, *v.SLADeadline, v.RequestedTick)
+				}
+			} else if v.SLADeadline != nil {
+				t.Errorf("%s: voyage %d from non-premium hub %q unexpectedly has an SLADeadline", profile, v.ID, v.OriginHub)
+			}
+		}
+	}
+}

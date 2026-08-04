@@ -58,19 +58,42 @@ func progressActiveVoyages(cycle *models.Cycle, voyagesByID map[int]*models.Voya
 	}
 }
 
+// completeVoyage runs when a voyage's current leg finishes. For a
+// single-hop voyage (or the last leg of a corridor), that means the whole
+// trip has arrived: free the gate, record scoring stats, and check the
+// deadline. For an earlier leg of a multi-hop corridor, the voyage instead
+// goes back to boarding for its next leg — it doesn't count as arrived
+// (and isn't scored) until the final leg completes, so a 3-leg corridor
+// still only counts once toward throughput, not three times.
 func completeVoyage(cycle *models.Cycle, voyage *models.Voyage, gate *models.Gate) {
-	voyage.Status = models.VoyageArrived
-	tick := cycle.Tick
-	voyage.ArrivalTick = &tick
-
 	gate.AvailablePower += voyage.RequiredPower
 	gate.AvailableContainment += voyage.RequiredContainment
 	gate.ActiveVoyages = removeInt(gate.ActiveVoyages, voyage.ID)
 
+	tick := cycle.Tick
+	departureTick := voyage.DepartureTick // captured before clearing; used below for the final leg's wait time
+	voyage.AssignedGate = nil
+	voyage.DepartureTick = nil
+
+	if voyage.LegIndex+1 < len(voyage.Legs) {
+		voyage.LegIndex++
+		next := voyage.Legs[voyage.LegIndex]
+		voyage.RequiredPower = next.RequiredPower
+		voyage.RequiredContainment = next.RequiredContainment
+		voyage.EstimatedDuration = next.EstimatedDuration
+		voyage.RemainingDuration = next.EstimatedDuration
+		voyage.Status = models.VoyageBoarding
+		voyage.BoardingTick = &tick
+		return
+	}
+
+	voyage.Status = models.VoyageArrived
+	voyage.ArrivalTick = &tick
+
 	cycle.Stats.ArrivedVoyages++
 	cycle.Stats.OriginHubArrivals[voyage.OriginHub]++
-	if voyage.BoardingTick != nil && voyage.DepartureTick != nil {
-		wait := int64(*voyage.DepartureTick - *voyage.BoardingTick)
+	if voyage.BoardingTick != nil && departureTick != nil {
+		wait := int64(*departureTick - *voyage.BoardingTick)
 		cycle.Stats.TotalWaitTicks += wait
 		cycle.Stats.OriginHubWaitTicks[voyage.OriginHub] += wait
 	}
@@ -78,6 +101,13 @@ func completeVoyage(cycle *models.Cycle, voyage *models.Voyage, gate *models.Gat
 		cycle.Stats.ArrivalsOnTime++
 	} else {
 		cycle.Stats.ArrivalsLate++
+	}
+	if voyage.SLADeadline != nil {
+		if tick <= *voyage.SLADeadline {
+			cycle.Stats.PremiumArrivalsOnTime++
+		} else {
+			cycle.Stats.PremiumArrivalsLate++
+		}
 	}
 }
 

@@ -6,6 +6,13 @@ order) with enough spare power/containment. No prioritization, no fairness,
 no deadline awareness. This is intentionally the naive baseline described in
 CHALLENGE.md so reviewers have a concrete "here's what near-zero effort
 looks like" data point when calibrating scores.
+
+Multi-hop corridor voyages and premium/SLA hubs (see CHALLENGE.md) need
+*zero* changes here: a corridor voyage's `requiredPower`/`requiredContainment`
+always describe its current leg, and it just reappears as "boarding" for its
+next leg like any other voyage. This scheduler handles that correctly by
+accident, not by design — it doesn't know premium hubs exist at all, which
+is exactly why it won't score well on slaCompliance.
 """
 
 from __future__ import annotations

@@ -65,6 +65,23 @@ the scheduler's fault. Tracking the tick a voyage's prerequisites actually
 resolved (`BoardingTick`) isolates the wait time that's actually attributable
 to scheduling decisions.
 
+A third, deliberate addition (not a fix — a scope decision): after building
+the reference schedulers, the challenge felt thin — a resource-check-and-
+assign loop covers most of the decision space, with not much left to
+differentiate a thoughtful submission from a merely-correct one. I added
+two features rather than more workload variety, specifically because they
+add new *kinds* of decisions instead of just more of the same kind:
+multi-hop corridor voyages (a voyage can require several sequential gate
+hops, not one) and a premium-hub SLA metric (a real implementation of the
+"premium projects should finish sooner without starving others" tension,
+rather than a hypothetical interview question). Both were designed to
+require zero special-casing in the validator and minimal special-casing in
+the engine — a corridor leg's requirements live in the *same* top-level
+`Voyage` fields the rest of the engine already reads, so gate-outage
+requeueing, resource validation, etc. all work on corridor voyages
+unmodified. I judged that worth the added surface area precisely because it
+didn't cost a parallel code path to get it.
+
 ## Tradeoffs
 
 **Optimized for:** correctness of the validator (every rejection returns a
@@ -124,6 +141,11 @@ picked). Finally, I'd build a small CLI that visualizes one expedition's run
 tick-by-tick — right now debugging a scheduler against this Oracle means
 reading raw JSON, and a timeline view of gate utilization and voyage
 arrivals would make that dramatically easier for anyone building against it.
+I'd also revisit corridors: right now any operational gate can serve any
+leg, which keeps the validator untouched but leaves "some gates specialize
+in certain legs" on the table — a real routing decision, not just a
+sequencing one, but it would mean threading gate-eligibility through the
+validator instead of reusing the plain resource check.
 
 ## Reflection
 

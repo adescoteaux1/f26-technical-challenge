@@ -15,11 +15,12 @@ import (
 // formula is intentionally not published"), but are centralized here so
 // they're easy to tune during Oracle development.
 const (
-	weightThroughput  = 0.25
-	weightUtilization = 0.20
-	weightDeadline    = 0.25
+	weightThroughput  = 0.20
+	weightUtilization = 0.15
+	weightDeadline    = 0.20
 	weightFairness    = 0.15
 	weightReliability = 0.15
+	weightSLA         = 0.15
 )
 
 // Compute derives the current Metrics + overall score from a cycle's
@@ -32,6 +33,7 @@ func Compute(cycle *models.Cycle) (models.Metrics, float64) {
 	arrivalSuccess := percent(s.ArrivalsOnTime, s.ArrivalsOnTime+s.ArrivalsLate, 100)
 	fairness := fairnessScore(s)
 	reliability := percent(s.ValidAssignments, s.ValidAssignments+s.InvalidAssignments, 100)
+	slaCompliance := percent(s.PremiumArrivalsOnTime, s.PremiumArrivalsOnTime+s.PremiumArrivalsLate, 100)
 
 	metrics := models.Metrics{
 		Throughput:      round1(throughput),
@@ -39,13 +41,15 @@ func Compute(cycle *models.Cycle) (models.Metrics, float64) {
 		ArrivalSuccess:  round1(arrivalSuccess),
 		Fairness:        round1(fairness),
 		Reliability:     round1(reliability),
+		SLACompliance:   round1(slaCompliance),
 	}
 
 	overall := weightThroughput*throughput +
 		weightUtilization*utilization +
 		weightDeadline*arrivalSuccess +
 		weightFairness*fairness +
-		weightReliability*reliability
+		weightReliability*reliability +
+		weightSLA*slaCompliance
 
 	return metrics, round1(overall)
 }
@@ -103,6 +107,7 @@ func AggregateOverall(cycles []*models.Cycle) (models.Metrics, float64) {
 		m.ArrivalSuccess += cycle.Metrics.ArrivalSuccess
 		m.Fairness += cycle.Metrics.Fairness
 		m.Reliability += cycle.Metrics.Reliability
+		m.SLACompliance += cycle.Metrics.SLACompliance
 		overall += cycle.Score
 	}
 	n := float64(len(cycles))
@@ -111,6 +116,7 @@ func AggregateOverall(cycles []*models.Cycle) (models.Metrics, float64) {
 	m.ArrivalSuccess = round1(m.ArrivalSuccess / n)
 	m.Fairness = round1(m.Fairness / n)
 	m.Reliability = round1(m.Reliability / n)
+	m.SLACompliance = round1(m.SLACompliance / n)
 	return m, round1(overall / n)
 }
 

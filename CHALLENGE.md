@@ -201,7 +201,10 @@ and tells you when it moves on (see §6).
   "assignedGate": null,
   "boardingTick": 10,
   "departureTick": null,
-  "arrivalTick": null
+  "arrivalTick": null,
+  "legs": null,
+  "legIndex": 0,
+  "slaDeadline": null
 }
 ```
 
@@ -215,8 +218,14 @@ and tells you when it moves on (see §6).
 - A voyage only appears in the API once its `requestedTick` has passed —
   you can't see or plan around travelers who haven't requested transit yet.
   New voyages can appear mid-run.
-- `prerequisites` are other voyage IDs (connecting legs) that must reach
-  `arrived` before this voyage can become `boarding`.
+- `prerequisites` are other voyage IDs that must reach `arrived` before
+  *this* voyage can become `boarding` — a different concept from `legs`
+  below, which is about one voyage's own multi-hop journey, not its
+  dependency on other voyages.
+- `legs` / `legIndex` — see **Multi-hop corridors** below. `null`/`0` for a
+  normal single-hop voyage.
+- `slaDeadline` — see **Premium hubs & SLA** below. `null` unless this
+  voyage's `originHub` is currently a premium hub.
 
 ### Gate
 
@@ -250,6 +259,74 @@ and tells you when it moves on (see §6).
 Submit an array of these to `POST /cycle/{id}/schedule`. `[]` is valid and
 just advances the clock with no new assignments.
 
+### Multi-hop corridors
+
+Some voyages (roughly 15%, picked at random) aren't a single gate hop —
+they're a corridor of 2-3 legs that must be completed **in order**, each
+through its own gate assignment:
+
+```json
+{
+  "id": 42,
+  "legs": [
+    {"requiredPower": 2, "requiredContainment": 2, "estimatedDuration": 4},
+    {"requiredPower": 3, "requiredContainment": 1, "estimatedDuration": 3}
+  ],
+  "legIndex": 0,
+  "requiredPower": 2,
+  "requiredContainment": 2,
+  "estimatedDuration": 4,
+  "remainingDuration": 4,
+  "status": "boarding"
+}
+```
+
+- `legs` is the voyage's *entire planned corridor*, visible up front so you
+  can plan ahead — but you can only ever assign the voyage to a gate for
+  its *current* leg.
+- The top-level `requiredPower` / `requiredContainment` / `estimatedDuration`
+  / `remainingDuration` always describe **the current leg** (`legs[legIndex]`),
+  not the whole trip — assign against those fields exactly like a normal
+  voyage; you don't need any special-case logic to schedule a corridor leg.
+- When a leg completes, the voyage does **not** arrive yet (unless it was
+  the last leg): `legIndex` advances, the top-level fields update to reflect
+  the next leg, `assignedGate` clears, and `status` goes back to `boarding`.
+  It only becomes `arrived` — and only then counts toward `throughput`,
+  `arrivalSuccess`, etc. — once the *last* leg completes.
+- The one `arrivalDeadline` on the voyage covers the whole corridor, not
+  each leg individually.
+- A scheduler that treats every "boarding" voyage identically will handle
+  this correctly by accident (it just re-appears asking to be scheduled
+  again) — but one that assumes "assigned once" means "done" will silently
+  under-report a corridor voyage's real gate demand and get surprised when
+  it reappears.
+
+### Premium hubs & SLA
+
+Each cycle designates 1-2 origin hubs as **premium** — paying for a
+tighter guarantee than the standard `arrivalDeadline`. You're told which
+hubs those are (`premiumHubs` on the cycle state — see §6), and any voyage
+from one of them additionally carries an `slaDeadline`, always tighter than
+its `arrivalDeadline`:
+
+```json
+{"premiumHubs": ["central-hub-alpha", "quantum-nexus"]}
+```
+
+```json
+{"id": 91, "originHub": "quantum-nexus", "arrivalDeadline": 60, "slaDeadline": 40}
+```
+
+`slaDeadline` doesn't affect validation — the Oracle will happily let you
+schedule a premium voyage as late as you want, same as any other. It only
+feeds the `slaCompliance` metric (see §7): the fraction of premium-hub
+voyages that beat their SLA window, not just their regular deadline. This
+is deliberately the "premium projects should finish sooner without
+starving everyone else" tension made concrete — `fairness` is still
+watching, so a scheduler that just always drains premium hubs first will
+win `slaCompliance` and lose `fairness`. Which tradeoff you make (and being
+able to say why) is the point.
+
 ---
 
 ## 6. How an expedition is structured
@@ -277,7 +354,7 @@ starts the next — keep polling/scheduling against the same `expeditionId`
 throughout. When all 16 are done, you get:
 
 ```json
-{"finished": true, "overallScore": 74.0, "metrics": {"throughput": 94.4, "gateUtilization": 44.8, "arrivalSuccess": 68.6, "fairness": 61.7, "reliability": 100}}
+{"finished": true, "overallScore": 74.0, "metrics": {"throughput": 94.4, "gateUtilization": 44.8, "arrivalSuccess": 68.6, "fairness": 61.7, "reliability": 100, "slaCompliance": 82.0}}
 ```
 
 `overallScore` is the **average across all 16 cycles** — consistency across
@@ -287,14 +364,15 @@ varied conditions matters more than a spiky best case.
 
 ## 7. What's being measured
 
-Five metrics, computed continuously: **throughput** (% of voyages that
+Six metrics, computed continuously: **throughput** (% of voyages that
 arrived), **gateUtilization** (% of gate capacity kept busy),
 **arrivalSuccess** (% of arrived voyages that beat their deadline),
 **fairness** (penalizes starving one origin hub's travelers to favor
 another), **reliability** (% of your submitted assignments that were
-valid). `overallScore` is a weighted blend of the five — we're not
-publishing the exact weights, same reasoning as §1: this isn't a formula to
-solve for.
+valid), **slaCompliance** (% of premium-hub voyages that beat their tighter
+SLA window — see §5's "Premium hubs & SLA"). `overallScore` is a weighted
+blend of all six — we're not publishing the exact weights, same reasoning
+as §1: this isn't a formula to solve for.
 
 ---
 
@@ -342,7 +420,12 @@ puzzle to solve in one sitting:
 5. **Handle gate outages explicitly** — notice when a voyage you previously
    assigned comes back to `boarding` with a different (or no)
    `assignedGate`.
-6. **Write `DESIGN.md` as you go**, not at the end. It's much easier to
+6. **Only then worry about corridors and premium hubs** — a scheduler that
+   just treats every "boarding" voyage the same way already handles
+   multi-leg corridors correctly by construction; premium hubs are a
+   genuine policy decision (favor them how much, at what cost to fairness?)
+   worth making deliberately once your basics are solid, not before.
+7. **Write `DESIGN.md` as you go**, not at the end. It's much easier to
    record your reasoning in the moment than to reconstruct it afterward,
    and it'll read more honestly for it.
 

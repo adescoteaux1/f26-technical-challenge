@@ -18,6 +18,16 @@ Differences from simple_scheduler.py, and why:
     otherwise equally urgent. This is deliberately a tie-break, not the
     primary sort key — fairness matters, but not at the cost of a voyage
     that's about to blow its deadline.
+  - Premium-hub voyages (see CHALLENGE.md's "Premium hubs & SLA") aren't
+    given a blanket priority boost — that would win slaCompliance and
+    tank fairness, the exact failure mode the challenge is pointing at.
+    Instead their *effective* deadline for slack purposes is their tighter
+    slaDeadline instead of arrivalDeadline, so they only jump the queue when
+    their SLA is actually at risk, by exactly as much as it's at risk.
+  - Slack accounts for a multi-hop corridor voyage's *entire remaining
+    trip*, not just its current leg: using only `remainingDuration` (the
+    current leg) would understate how much work is actually left for a
+    voyage with more legs still ahead, making it look falsely safe.
 
 The strategy is isolated in the Scheduler class so it's obvious what would
 need to change to try a different approach — nothing outside `decide`
@@ -69,12 +79,34 @@ class Scheduler:
         # voyages piled up behind it. Sorting by slack instead accounts for how
         # long the voyage itself takes, which is what earliest-deadline-first
         # was missing.
-        slack = (voyage["arrivalDeadline"] - current_tick) - voyage["remainingDuration"]
+        deadline = self._effective_deadline(voyage)
+        remaining_work = self._remaining_corridor_work(voyage)
+        slack = (deadline - current_tick) - remaining_work
         return (
             slack,                                                  # least slack first
             -voyage["priority"],                                    # higher priority first on a tie
             self._hub_assignment_counts[voyage["originHub"]],       # least-served hub first on a tie
         )
+
+    @staticmethod
+    def _effective_deadline(voyage: dict) -> int:
+        # A premium voyage's real constraint is its SLA, not the looser
+        # arrivalDeadline — treat the SLA as its deadline for urgency
+        # purposes so it only outcompetes other voyages once that's
+        # actually at risk, rather than always.
+        sla = voyage.get("slaDeadline")
+        return sla if sla is not None else voyage["arrivalDeadline"]
+
+    @staticmethod
+    def _remaining_corridor_work(voyage: dict) -> int:
+        # remainingDuration only covers the *current* leg. A multi-hop
+        # voyage with legs still ahead has more work left than that alone
+        # suggests, so add each not-yet-started leg's full duration.
+        legs = voyage.get("legs")
+        if not legs:
+            return voyage["remainingDuration"]
+        future_legs = legs[voyage.get("legIndex", 0) + 1:]
+        return voyage["remainingDuration"] + sum(leg["estimatedDuration"] for leg in future_legs)
 
     @staticmethod
     def _best_fit_gate(voyage: dict, remaining: dict[int, tuple[int, int]]) -> int | None:

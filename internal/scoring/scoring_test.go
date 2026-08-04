@@ -50,6 +50,26 @@ func TestCompute_DefaultsWhenNoDataYet(t *testing.T) {
 	if metrics.Fairness != 100 {
 		t.Errorf("expected fairness to default to 100 with fewer than 2 origin hubs, got %v", metrics.Fairness)
 	}
+	if metrics.SLACompliance != 100 {
+		t.Errorf("expected slaCompliance to default to 100 before any premium arrivals, got %v", metrics.SLACompliance)
+	}
+}
+
+func TestCompute_SLACompliancePercentage(t *testing.T) {
+	cycle := &models.Cycle{
+		Stats: models.SimStats{
+			PremiumArrivalsOnTime: 3,
+			PremiumArrivalsLate:   1,
+			OriginHubArrivals:     map[string]int{},
+			OriginHubWaitTicks:    map[string]int64{},
+		},
+	}
+
+	metrics, _ := Compute(cycle)
+
+	if metrics.SLACompliance != 75 {
+		t.Errorf("expected slaCompliance 75 (3 of 4 on time), got %v", metrics.SLACompliance)
+	}
 }
 
 func TestCompute_ReliabilityPenalizesInvalidAssignments(t *testing.T) {
@@ -108,8 +128,8 @@ func TestFairness_SkewedWaitTimesScoresLower(t *testing.T) {
 
 func TestAggregateOverall_AveragesAcrossCycles(t *testing.T) {
 	cycles := []*models.Cycle{
-		{Score: 80, Metrics: models.Metrics{Throughput: 100, GateUtilization: 100, ArrivalSuccess: 100, Fairness: 100, Reliability: 100}},
-		{Score: 60, Metrics: models.Metrics{Throughput: 0, GateUtilization: 0, ArrivalSuccess: 0, Fairness: 0, Reliability: 0}},
+		{Score: 80, Metrics: models.Metrics{Throughput: 100, GateUtilization: 100, ArrivalSuccess: 100, Fairness: 100, Reliability: 100, SLACompliance: 100}},
+		{Score: 60, Metrics: models.Metrics{Throughput: 0, GateUtilization: 0, ArrivalSuccess: 0, Fairness: 0, Reliability: 0, SLACompliance: 0}},
 	}
 
 	metrics, overall := AggregateOverall(cycles)

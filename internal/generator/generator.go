@@ -41,6 +41,20 @@ var originHubNames = []string{
 	"southern-passage", "western-bridge",
 }
 
+// Corridor and premium-tier tuning. Applied uniformly across every profile
+// (rather than as per-profile config knobs) to keep the tuning surface
+// small: these two features are about adding a new *kind* of decision, not
+// about varying workload difficulty, so one shared setting is enough.
+const (
+	corridorFraction = 0.15 // fraction of voyages converted into multi-hop corridors
+	slaSlackFactor   = 0.6  // premium SLA deadline = requested + (arrivalDeadline window) * this
+)
+
+var (
+	corridorLegsRange    = intRange{2, 3}
+	premiumHubCountRange = intRange{1, 2}
+)
+
 // intRange is an inclusive [Min, Max] range sampled uniformly.
 type intRange struct{ Min, Max int }
 
@@ -150,9 +164,75 @@ func Generate(profile string, seed int64) (*models.Cycle, error) {
 
 	voyageCount := cfg.Voyages.sample(rng)
 	cycle.Voyages = generateVoyages(rng, cfg, voyageCount)
+	applyCorridors(rng, cfg, cycle.Voyages)
+	applyPremiumHubs(rng, cycle)
 	cycle.Stats.TotalVoyages = len(cycle.Voyages)
 
 	return cycle, nil
+}
+
+// applyCorridors converts a fraction of voyages into multi-hop corridors: a
+// voyage that must pass through a sequence of gates (one at a time, each
+// its own resource requirement and duration) before it counts as arrived,
+// rather than a single gate assignment. See models.Voyage.Legs.
+func applyCorridors(rng *rand.Rand, cfg config, voyages []*models.Voyage) {
+	for _, v := range voyages {
+		if rng.Float64() >= corridorFraction {
+			continue
+		}
+		numLegs := corridorLegsRange.sample(rng)
+		originalDuration := v.EstimatedDuration
+		slackWindow := v.ArrivalDeadline - v.RequestedTick
+
+		legs := make([]models.VoyageLeg, numLegs)
+		totalDuration := 0
+		for i := range legs {
+			legs[i] = models.VoyageLeg{
+				RequiredPower:       cfg.VoyagePower.sample(rng),
+				RequiredContainment: cfg.VoyageContainment.sample(rng),
+				EstimatedDuration:   cfg.Duration.sample(rng),
+			}
+			totalDuration += legs[i].EstimatedDuration
+		}
+
+		v.Legs = legs
+		v.LegIndex = 0
+		v.RequiredPower = legs[0].RequiredPower
+		v.RequiredContainment = legs[0].RequiredContainment
+		v.EstimatedDuration = legs[0].EstimatedDuration
+		v.RemainingDuration = legs[0].EstimatedDuration
+
+		// Scale this voyage's existing deadline window proportionally to the
+		// new total (multi-leg) duration, preserving whatever relative
+		// slack it already had rather than recomputing from scratch.
+		if originalDuration > 0 {
+			v.ArrivalDeadline = v.RequestedTick + int(float64(slackWindow)/float64(originalDuration)*float64(totalDuration))
+		}
+	}
+}
+
+// applyPremiumHubs designates 1-2 origin hubs as "premium" for this cycle
+// and gives their voyages a tighter SLADeadline, used only by the
+// slaCompliance metric — see models.Cycle.PremiumHubs.
+func applyPremiumHubs(rng *rand.Rand, cycle *models.Cycle) {
+	count := premiumHubCountRange.sample(rng)
+	shuffled := append([]string{}, originHubNames...)
+	rng.Shuffle(len(shuffled), func(i, j int) { shuffled[i], shuffled[j] = shuffled[j], shuffled[i] })
+	cycle.PremiumHubs = append([]string{}, shuffled[:count]...)
+
+	premium := make(map[string]bool, count)
+	for _, hub := range cycle.PremiumHubs {
+		premium[hub] = true
+	}
+
+	for _, v := range cycle.Voyages {
+		if !premium[v.OriginHub] {
+			continue
+		}
+		window := v.ArrivalDeadline - v.RequestedTick
+		sla := v.RequestedTick + int(float64(window)*slaSlackFactor)
+		v.SLADeadline = &sla
+	}
 }
 
 // generateVoyages builds voyages in prerequisite-respecting layers: each

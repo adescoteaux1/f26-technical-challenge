@@ -87,6 +87,7 @@ type expeditionStateResponse struct {
 	MaxTicks     int                  `json:"maxTicks,omitempty"`
 	Gates        []*models.Gate       `json:"gates,omitempty"`
 	Voyages      []*models.Voyage     `json:"voyages,omitempty"`
+	PremiumHubs  []string             `json:"premiumHubs,omitempty"`
 	Score        float64              `json:"score,omitempty"`
 	Metrics      models.Metrics       `json:"metrics"`
 	Rejected     []rejectedVoyageView `json:"rejected,omitempty"`
@@ -104,6 +105,7 @@ func toCycleStateResponse(totalCycles int, cycle *models.Cycle, rejected []engin
 		MaxTicks:     cycle.MaxTicks,
 		Gates:        cycle.Gates,
 		Voyages:      cycle.VisibleVoyages(),
+		PremiumHubs:  cycle.PremiumHubs,
 		Score:        cycle.Score,
 		Metrics:      cycle.Metrics,
 	}

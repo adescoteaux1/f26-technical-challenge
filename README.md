@@ -190,6 +190,22 @@ no single profile can end up over- or under-represented by luck, and
 difficulty is comparable across expeditions without anyone reliably drawing
 an "easy" run.
 
+Independent of profile, two orthogonal wrinkles apply to every cycle:
+
+- **Multi-hop corridors** — ~15% of voyages (`internal/generator/generator.go`'s
+  `applyCorridors`) require passing through a sequence of 2-3 gates in order
+  (`Voyage.Legs`/`LegIndex`) rather than a single hop. The engine only
+  advances `LegIndex` and re-opens the voyage for boarding when a
+  non-final leg completes; scoring (throughput, arrivalSuccess, ...) only
+  fires once, on the final leg — so the top-level `Voyage` fields always
+  describe "the current leg," and nothing downstream needed special-casing.
+- **Premium hubs & SLA** — each cycle designates 1-2 origin hubs as
+  premium (`applyPremiumHubs`), giving their voyages a tighter
+  `SLADeadline` alongside the normal `ArrivalDeadline`, feeding the
+  `slaCompliance` metric below. It's a real implementation of the
+  "premium projects should finish sooner without starving everyone else"
+  tension, rather than a hypothetical.
+
 ## Scoring
 
 Metrics are recomputed from running totals on every request (not just at the
@@ -202,8 +218,11 @@ end), so `GET /expedition/{id}` always reflects live progress:
   across origin hubs (a scheduler that starves one hub scores lower here
   even with high throughput)
 - **reliability** — % of submitted assignments that were valid
+- **slaCompliance** — % of premium-hub voyages that beat their SLA deadline
+  (see "Premium hubs & SLA" above); defaults to 100 when no premium voyage
+  has arrived yet
 
-The overall score is a fixed weighted combination of the five (see
+The overall score is a fixed weighted combination of all six (see
 `internal/scoring/scoring.go`); the expedition-level score is the simple
 average of each cycle's overall score, per the "average performance
 across every cycle" scoring philosophy.
