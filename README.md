@@ -83,16 +83,27 @@ a service whose only clients are scheduler programs, not browsers.
 ## Site pages
 
 The Oracle also serves a small static site (`site/`, plus `internal/api/pages.go`)
-alongside the API:
+alongside the API — a landing page and one rendered page per challenge:
 
-- **`/`** — landing page linking to both the frontend and backend challenges
-- **`/challenge`** — the challenge spec, rendered from `CHALLENGE.md` on
-  every request (not embedded — edit the file and reload, no rebuild
-  needed), with a "Resources" section and a link to `/docs` appended
+- **`/`** — landing page linking to both the frontend and backend
+  challenges, with a callout that applicants only need to complete *one*
+  of the two, and that whichever they pick must end up in a GitHub repo
+- **`/challenge`** — the backend (scheduler) challenge spec, rendered from
+  `CHALLENGE.md`, with a "Resources" section (curated links: HTTP/APIs,
+  retries/idempotency, JSON, testing) and a link to `/docs` appended
+- **`/frontend-challenge`** — the frontend (operations console) challenge
+  spec, rendered from `FRONTEND_CHALLENGE.md`. Currently a placeholder ("spec
+  hasn't been written yet") with no Resources section — add one once the
+  real spec exists, same as `/challenge`
 - **`/style.css`** — shared stylesheet (embedded via `site/embed.go`)
 
-`site/index.html`'s frontend-challenge link is a placeholder
-(`#TODO-frontend-challenge-url`) until that project has a real URL.
+Both challenge pages share one renderer
+(`markdownPage(path, title, resources)` in `internal/api/pages.go`): the
+markdown file is read from disk and re-rendered on every request rather
+than embedded, so editing `CHALLENGE.md` or `FRONTEND_CHALLENGE.md` shows
+up on reload with no rebuild. `site/index.html` and `site/style.css` *are*
+embedded (`site/embed.go`), so changes to those need a rebuild/restart to
+take effect.
 
 ## API
 
