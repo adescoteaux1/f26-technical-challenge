@@ -378,6 +378,10 @@ as §1: this isn't a formula to solve for.
 
 ## 8. What to submit
 
+Your whole submission — code, `README.md`, `DESIGN.md`, tests, all of it —
+needs to live in a GitHub repo (public, or shared with whoever's reviewing
+it). That repo *is* the submission.
+
 1. **A working scheduler** that runs one or more full expeditions against
    the Oracle end to end.
 2. **`README.md`** — setup, how to run it, dependencies, project layout.
@@ -428,6 +432,16 @@ puzzle to solve in one sitting:
 7. **Write `DESIGN.md` as you go**, not at the end. It's much easier to
    record your reasoning in the moment than to reconstruct it afterward,
    and it'll read more honestly for it.
+
+One optional idea if you want to push further, and it has nothing to do
+with scheduling logic: treat the Oracle like the real, occasionally-flaky
+network dependency it is. Nothing here requires it — a request either
+succeeds or it doesn't, and the loop in §4 works fine without any of this —
+but a client that retries transient failures with backoff, and re-checks
+state rather than blindly resubmitting after an ambiguous failure (a
+request can fail on your end after the Oracle already applied it), is
+demonstrating a kind of production-mindedness that's genuinely rare to see
+and worth showing off if you have the time for it.
 
 There's no house style here — a scheduler that's a single clean greedy loop
 with excellent tests and a sharp writeup is a completely legitimate answer.

@@ -80,6 +80,20 @@ the old one). Tokens are opaque, random, and looked up directly against the
 `users` table — there's no JWT/session/expiry machinery, which is enough for
 a service whose only clients are scheduler programs, not browsers.
 
+## Site pages
+
+The Oracle also serves a small static site (`site/`, plus `internal/api/pages.go`)
+alongside the API:
+
+- **`/`** — landing page linking to both the frontend and backend challenges
+- **`/challenge`** — the challenge spec, rendered from `CHALLENGE.md` on
+  every request (not embedded — edit the file and reload, no rebuild
+  needed), with a "Resources" section and a link to `/docs` appended
+- **`/style.css`** — shared stylesheet (embedded via `site/embed.go`)
+
+`site/index.html`'s frontend-challenge link is a placeholder
+(`#TODO-frontend-challenge-url`) until that project has a real URL.
+
 ## API
 
 Every endpoint is built with [Huma](https://huma.rocks), which generates an
@@ -157,9 +171,11 @@ internal/
   evaluation/          Expedition Engine: orchestrates generator + engine + scoring + store
                        behind the three cycle endpoints; owns profile sampling, rollover,
                        and per-expedition ownership checks
-  api/                 HTTP layer: router, auth middleware, handlers, response DTOs
+  api/                 HTTP layer: router, auth middleware, handlers, response DTOs,
+                       pages.go (landing + rendered CHALLENGE.md pages)
   storetest/           in-memory store.Store fake shared by every package's tests
 migrations/            embedded SQL schema, applied automatically on startup
+site/                  embedded static assets for the landing/spec pages (index.html, style.css)
 ```
 
 The dependency direction is one-way: `api` → `{evaluation, userauth}` →

@@ -3,7 +3,9 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 
@@ -111,6 +113,49 @@ func (s *Server) submitCycleHandler(ctx context.Context, input *scheduleInput) (
 		resp.Body = toCycleStateResponse(result.Expedition.TotalCycles, result.Cycle, result.Rejected)
 	}
 	return resp, nil
+}
+
+// chaosProbeHandler simulates a flaky network dependency, deterministically
+// and without any server-side session state, so a scheduler client can
+// write a real, reproducible test for its own retry/timeout/backoff logic
+// instead of just hoping it works. See dto.go's chaosProbeInput for the
+// available modes.
+func (s *Server) chaosProbeHandler(ctx context.Context, input *chaosProbeInput) (*chaosProbeOutput, error) {
+	switch input.Mode {
+	case "error":
+		return nil, huma.Error503ServiceUnavailable("simulated transient failure — retry me")
+
+	case "timeout":
+		delay := time.Duration(input.DelayMs) * time.Millisecond
+		select {
+		case <-time.After(delay):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+		resp := &chaosProbeOutput{}
+		resp.Body = chaosProbeResponse{
+			Attempt: input.Attempt, Outcome: "success",
+			Message: fmt.Sprintf("responded after a %dms delay", input.DelayMs),
+		}
+		return resp, nil
+
+	case "flaky":
+		if input.Attempt < input.FailUntil {
+			return nil, huma.Error503ServiceUnavailable(fmt.Sprintf(
+				"simulated failure on attempt %d (will succeed once attempt >= %d)", input.Attempt, input.FailUntil))
+		}
+		resp := &chaosProbeOutput{}
+		resp.Body = chaosProbeResponse{
+			Attempt: input.Attempt, Outcome: "success",
+			Message: fmt.Sprintf("succeeded on attempt %d", input.Attempt),
+		}
+		return resp, nil
+
+	default:
+		resp := &chaosProbeOutput{}
+		resp.Body = chaosProbeResponse{Attempt: input.Attempt, Outcome: "success", Message: "ok"}
+		return resp, nil
+	}
 }
 
 func (s *Server) lookupError(err error) error {

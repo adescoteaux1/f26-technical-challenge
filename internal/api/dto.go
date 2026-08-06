@@ -167,3 +167,23 @@ type scheduleInput struct {
 type expeditionStateOutput struct {
 	Body expeditionStateResponse
 }
+
+// chaosProbeInput controls a deterministic, stateless failure simulation —
+// see handlers.go's chaosProbeHandler. Every field has a sane default so
+// GET /chaos/probe with no query params at all just succeeds.
+type chaosProbeInput struct {
+	Mode      string `query:"mode" enum:"success,error,timeout,flaky" default:"success" doc:"Which failure mode to simulate"`
+	Attempt   int    `query:"attempt" default:"1" doc:"Which retry attempt this is; you increment it yourself across retries. Only used by mode=flaky."`
+	FailUntil int    `query:"failUntil" default:"3" doc:"For mode=flaky: fails while attempt < failUntil, succeeds once attempt >= failUntil."`
+	DelayMs   int    `query:"delayMs" default:"3000" doc:"For mode=timeout: how long to delay the response, in milliseconds."`
+}
+
+type chaosProbeResponse struct {
+	Attempt int    `json:"attempt"`
+	Outcome string `json:"outcome"`
+	Message string `json:"message"`
+}
+
+type chaosProbeOutput struct {
+	Body chaosProbeResponse
+}

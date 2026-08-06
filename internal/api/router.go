@@ -22,6 +22,11 @@ func NewRouter(s *Server) http.Handler {
 		w.WriteHeader(http.StatusOK)
 	})
 
+	r.Get("/", landingPageHandler)
+	r.Get("/style.css", stylesheetHandler)
+	r.Get("/challenge", challengePageHandler)
+	r.Get("/frontend-challenge", frontendChallengePageHandler)
+
 	config := huma.DefaultConfig("Nexus Transit Authority — Oracle", "1.0.0")
 	config.Info.Description = "Scheduling challenge Oracle: register, start an expedition, " +
 		"and submit gate/voyage assignments each cycle tick."
@@ -91,6 +96,18 @@ func NewRouter(s *Server) http.Handler {
 		Tags:        []string{"Expeditions"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, s.submitCycleHandler)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "chaos-probe",
+		Method:      http.MethodGet,
+		Path:        "/chaos/probe",
+		Summary:     "Simulate a flaky network response, for testing your client's own resilience",
+		Description: "Deterministic and stateless: same query params always produce the same " +
+			"outcome, so you can write a real test against it instead of hoping your retry " +
+			"logic works. Not connected to any expedition or score.",
+		Tags:     []string{"Testing"},
+		Security: []map[string][]string{{"bearer": {}}},
+	}, s.chaosProbeHandler)
 
 	return r
 }

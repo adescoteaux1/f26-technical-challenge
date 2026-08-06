@@ -59,10 +59,15 @@ func (s *PostgresStore) CreateExpedition(ctx context.Context, exp *models.Expedi
 	if err != nil {
 		return err
 	}
+	// JSONB params are passed as string, not []byte: under the simple query
+	// protocol (needed for transaction-mode connection poolers like
+	// Supavisor), pgx encodes a []byte arg as a bytea literal, which
+	// Postgres then can't parse as JSON for a jsonb column. A string arg is
+	// sent as a text literal instead, which casts to jsonb correctly either way.
 	_, err = tx.Exec(ctx, `
 		INSERT INTO expeditions (id, user_id, total_cycles, current_cycle, finished, overall_score, metrics, profile_plan)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-		exp.ID, exp.UserID, exp.TotalCycles, exp.CurrentCycle, exp.Finished, exp.OverallScore, metricsJSON, profilePlanJSON)
+		exp.ID, exp.UserID, exp.TotalCycles, exp.CurrentCycle, exp.Finished, exp.OverallScore, string(metricsJSON), string(profilePlanJSON))
 	if err != nil {
 		return fmt.Errorf("insert expedition: %w", err)
 	}
@@ -149,7 +154,7 @@ func saveCycleTx(ctx context.Context, tx pgx.Tx, cycle *models.Cycle) error {
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
 		ON CONFLICT (expedition_id, cycle_number)
 		DO UPDATE SET finished = $5, score = $6, metrics = $7, state = $8, updated_at = now()`,
-		cycle.ExpeditionID, cycle.Number, cycle.Profile, cycle.Seed, cycle.Finished, cycle.Score, metricsJSON, stateJSON)
+		cycle.ExpeditionID, cycle.Number, cycle.Profile, cycle.Seed, cycle.Finished, cycle.Score, string(metricsJSON), string(stateJSON))
 	if err != nil {
 		return fmt.Errorf("upsert cycle: %w", err)
 	}
@@ -168,7 +173,7 @@ func (s *PostgresStore) FinishExpedition(ctx context.Context, expeditionID strin
 	}
 	_, err = s.pool.Exec(ctx, `
 		UPDATE expeditions SET finished = TRUE, overall_score = $2, metrics = $3 WHERE id = $1`,
-		expeditionID, overallScore, metricsJSON)
+		expeditionID, overallScore, string(metricsJSON))
 	return err
 }
 
