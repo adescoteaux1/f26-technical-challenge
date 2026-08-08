@@ -1,12 +1,12 @@
-# Oracle Server — Design Notes
+# Control Tower Server — Design Notes
 
-This documents the design of the **Oracle** (the grading/simulation
+This documents the design of the **Control Tower** (the grading/simulation
 infrastructure), not a scheduler — there is no scheduling strategy to defend
 here, just the engineering behind the environment a scheduler runs against.
 
 ## Initial Design
 
-The spec leaves a lot of the Oracle's internals unspecified on purpose
+The spec leaves a lot of the Control Tower's internals unspecified on purpose
 ("the exact scoring formula is intentionally not published"), but the three
 REST endpoints and their example payloads are fixed. I started from the
 contract and worked inward: get `POST /expedition` → `GET /expedition/{id}`
@@ -24,7 +24,7 @@ Two decisions were made early and shaped everything else:
    held to non-negotiably: without it, two applicants could get wildly
    different difficulty by luck of the seed, which undermines the whole
    "average across cycles" scoring philosophy.
-2. **The Oracle is stateless per HTTP request.** Every tick's full
+2. **The Control Tower is stateless per HTTP request.** Every tick's full
    cycle state (voyages, gates, accumulated stats) round-trips through
    Postgres as a JSONB document keyed by `(expedition_id, cycle_number)`.
    No in-memory session, no sticky state — a scheduler could restart mid-run
@@ -113,7 +113,7 @@ The trickiest problem was actually in the spec's ambiguity, not the code:
 but the endpoints are named `/cycle/` and `/expedition/` respectively —
 it's not obvious from the spec alone whether `{id}` means the same thing in
 both. I resolved this by making `{id}` mean the expedition ID everywhere: a
-client holds one identifier for the life of an expedition, and the Oracle
+client holds one identifier for the life of an expedition, and the Control Tower
 tracks which cycle number is "current" server-side. The alternative
 (the client tracking a separate cycle ID that changes on rollover) adds
 a coordination step for no real benefit, since cycles within one
@@ -138,7 +138,7 @@ I'd also add property-based tests for the generator (assert the prerequisite
 graph is always acyclic and every arrival deadline is theoretically reachable
 given gate capacity, across hundreds of random seeds, not just the few I hand
 picked). Finally, I'd build a small CLI that visualizes one expedition's run
-tick-by-tick — right now debugging a scheduler against this Oracle means
+tick-by-tick — right now debugging a scheduler against this Control Tower means
 reading raw JSON, and a timeline view of gate utilization and voyage
 arrivals would make that dramatically easier for anyone building against it.
 I'd also revisit corridors: right now any operational gate can serve any

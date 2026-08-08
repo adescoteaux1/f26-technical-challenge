@@ -2,10 +2,11 @@ package evaluation
 
 import (
 	"context"
+	"sync"
 	"testing"
 
-	"github.com/adescoteaux1/generate-oracle/internal/models"
-	"github.com/adescoteaux1/generate-oracle/internal/storetest"
+	"github.com/adescoteaux1/generate-control-tower/internal/models"
+	"github.com/adescoteaux1/generate-control-tower/internal/storetest"
 )
 
 const testUserID = "test-user-1"
@@ -141,6 +142,43 @@ func TestSubmit_NoOpAfterExpeditionAlreadyFinished(t *testing.T) {
 	}
 	if result.Expedition.OverallScore != 88 {
 		t.Fatalf("expected finished expedition's score preserved, got %v", result.Expedition.OverallScore)
+	}
+}
+
+// TestSubmit_ConcurrentSubmissionsDoNotLoseUpdates guards against the race
+// Submit's read-modify-write (GetExpedition, GetCycle, SaveCycle,
+// AdvanceExpedition) is exposed to without WithExpeditionLock: two
+// overlapping submissions reading the same tick and the later save
+// silently clobbering the earlier one's result. Every concurrent Submit
+// call here advances the clock by exactly one tick, so if the lock is
+// doing its job, the final tick count must equal the number of calls.
+func TestSubmit_ConcurrentSubmissionsDoNotLoseUpdates(t *testing.T) {
+	st := storetest.New()
+	exp, err := Create(context.Background(), st, testUserID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	const concurrentSubmissions = 50
+	var wg sync.WaitGroup
+	for i := 0; i < concurrentSubmissions; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := Submit(context.Background(), st, exp.ID, testUserID, nil); err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+
+	cycle, err := st.GetCycle(context.Background(), exp.ID, 1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cycle.Tick != concurrentSubmissions {
+		t.Fatalf("expected tick %d after %d concurrent submissions (one tick each), got %d — a lost update",
+			concurrentSubmissions, concurrentSubmissions, cycle.Tick)
 	}
 }
 

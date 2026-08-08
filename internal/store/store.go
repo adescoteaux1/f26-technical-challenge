@@ -1,5 +1,5 @@
 // Package store persists expedition, cycle, and user state between HTTP
-// requests. The Oracle is stateless per-request, so every tick's state must
+// requests. The Control Tower is stateless per-request, so every tick's state must
 // round-trip through here.
 package store
 
@@ -8,7 +8,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/adescoteaux1/generate-oracle/internal/models"
+	"github.com/adescoteaux1/generate-control-tower/internal/models"
 )
 
 // ErrNotFound is returned when an expedition, cycle, or user does not exist.
@@ -85,6 +85,17 @@ type Store interface {
 
 	// SetUserToken rotates a user's bearer token (used on login).
 	SetUserToken(ctx context.Context, userID, token string) error
+
+	// WithExpeditionLock runs fn while holding an exclusive lock scoped to
+	// expeditionID. Submit's read-modify-write (GetExpedition, GetCycle,
+	// SaveCycle, AdvanceExpedition/FinishExpedition) spans several store
+	// calls with no single transaction tying them together, so two
+	// overlapping schedule submissions for the same expedition (a retried
+	// request racing the original, for example) could otherwise both read
+	// the same tick and the second's save would silently clobber the
+	// first's. Locks for different expeditions never contend with each
+	// other.
+	WithExpeditionLock(ctx context.Context, expeditionID string, fn func(ctx context.Context) error) error
 
 	Close()
 }

@@ -11,7 +11,7 @@ import (
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/extension"
 
-	"github.com/adescoteaux1/generate-oracle/site"
+	"github.com/adescoteaux1/generate-control-tower/site"
 )
 
 // markdownRenderer enables GFM (tables, strikethrough, autolinks, ...) —
@@ -39,7 +39,7 @@ var challengeResources = []resourceLink{
 	{"MDN: HTTP overview", "https://developer.mozilla.org/en-US/docs/Web/HTTP/Overview"},
 	{"MDN: HTTP response status codes", "https://developer.mozilla.org/en-US/docs/Web/HTTP/Status"},
 	{"OpenAPI Specification", "https://spec.openapis.org/oas/latest.html"},
-	{"Scalar — this Oracle's live API reference", "https://scalar.com/"},
+	{"Scalar — this Control Tower's live API reference", "https://scalar.com/"},
 	{"AWS: Timeouts, retries, and backoff with jitter", "https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter"},
 	{"Stripe: Designing robust and predictable APIs with idempotency", "https://stripe.com/blog/idempotency"},
 	{"MDN: Working with JSON", "https://developer.mozilla.org/en-US/docs/Learn/JavaScript/Objects/JSON"},

@@ -1,10 +1,16 @@
 # Internal reference solutions — do not share externally
 
-Two example scheduler clients against the Oracle, used to calibrate what
+Two example scheduler clients against the Control Tower, used to calibrate what
 "simple" and "better" look like when reviewing an applicant's actual
 submission. **These are internal-only.** If this repo or `CHALLENGE.md` is
 ever handed to applicants, this folder must be stripped out first — it's an
 answer key.
+
+If you're prepping to sit in on an applicant's walkthrough, see
+[`INTERVIEWER_GUIDE.md`](INTERVIEWER_GUIDE.md) instead — it covers the
+scoring weights, score calibration, a suggested question bank, and red
+flags. This file is background for *why* those reference numbers are what
+they are.
 
 - `simple_scheduler.py` — a naive, greedy scheduler: assign any boarding
   voyage to the first gate with room, in ID order. No prioritization, no
@@ -20,7 +26,7 @@ answer key.
   `Scheduler._sort_key` for why pure earliest-deadline-first actually
   performed worse in testing), ties broken by priority then by which origin
   hub has been served least; does best-fit gate selection to reduce
-  fragmentation. It also accounts for the two newer Oracle features
+  fragmentation. It also accounts for the two newer Control Tower features
   deliberately rather than by accident: a premium-hub voyage's *effective*
   deadline for urgency purposes is its tighter `slaDeadline`, not the looser
   `arrivalDeadline` (so it only jumps the queue once its SLA is actually at
@@ -35,10 +41,10 @@ points on the spectrum, not a ceiling.
 
 ## A real caveat: scores vary run to run
 
-The Oracle samples its workload profiles randomly per evaluation and isn't
+The Control Tower samples its workload profiles randomly per evaluation and isn't
 seeded by the client (by design — see `DESIGN.md`), so two runs of the
 *same* script will face different workload draws and won't produce
-identical scores. The Oracle originally ran 8 cycles per evaluation with
+identical scores. The Control Tower originally ran 8 cycles per evaluation with
 fully-random extra profile draws; it now runs **16** cycles per evaluation
 with a balanced-coverage sampler (see `DESIGN.md`'s Iteration section) to
 reduce exactly this kind of noise. Actual live runs across both versions:
@@ -74,7 +80,7 @@ Two things worth taking away from this, honestly:
    being wasted: it still wins gateUtilization in every run and usually
    wins fairness. It means the specific heuristics here (slack ordering,
    best-fit, a simple hub tiebreak) aren't enough of an edge to dominate a
-   correct greedy baseline under this Oracle's current metric weights — a
+   correct greedy baseline under this Control Tower's current metric weights — a
    real gap in the reference solution, not a bug. Take that as a signal
    about how much headroom actually exists here, not as "any naive
    scheduler is basically as good as a thoughtful one." Don't treat any
@@ -95,13 +101,13 @@ Two things worth taking away from this, honestly:
 cd examples-internal
 pip install -r requirements.txt
 
-# against a locally running Oracle (see repo root README.md to start it)
+# against a locally running Control Tower (see repo root README.md to start it)
 python simple_scheduler.py
 python better_scheduler.py
 ```
 
-Both scripts read `ORACLE_BASE_URL` (default `http://localhost:8080`) and
+Both scripts read `CONTROL_TOWER_BASE_URL` (default `http://localhost:8080`) and
 will register a fixed internal account on first run, then log back in on
 subsequent runs (so repeated runs accumulate history under the same
-account — useful for watching how a script's score holds up as the Oracle
+account — useful for watching how a script's score holds up as the Control Tower
 itself changes).

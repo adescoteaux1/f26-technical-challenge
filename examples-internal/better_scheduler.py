@@ -5,7 +5,7 @@ Differences from simple_scheduler.py, and why:
 
   - Voyages are ordered by how close they are to missing their deadline
     (ties broken by priority, then by which origin hub has been served the
-    least so far) instead of whatever order the Oracle happens to return
+    least so far) instead of whatever order the Control Tower happens to return
     them in. This directly targets arrivalSuccess without ignoring
     throughput: something with a deadline 200 ticks out can wait behind
     something with 3 ticks left.
@@ -38,7 +38,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-import oracle_client as oracle
+import control_tower_client as tower
 
 EMAIL = "better-scheduler@internal.local"
 NUID = "000000002"
@@ -123,17 +123,17 @@ class Scheduler:
 
 
 def run() -> None:
-    token = oracle.login_or_register(EMAIL, NUID)
-    expedition = oracle.create_expedition(token)
+    token = tower.login_or_register(EMAIL, NUID)
+    expedition = tower.create_expedition(token)
     expedition_id = expedition["expeditionId"]
     print(f"expedition {expedition_id}: {expedition['totalCycles']} cycles")
 
     scheduler = Scheduler()
-    state = oracle.get_expedition(token, expedition_id)
+    state = tower.get_expedition(token, expedition_id)
     ticks = 0
     while not state.get("finished"):
         assignments = scheduler.decide(state)
-        state = oracle.submit_cycle(token, expedition_id, assignments)
+        state = tower.submit_cycle(token, expedition_id, assignments)
         ticks += 1
         if ticks % 200 == 0:
             print(f"  ...cycle {state.get('cycle')}/{state.get('totalCycles')}, "

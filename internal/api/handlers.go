@@ -9,9 +9,9 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"github.com/adescoteaux1/generate-oracle/internal/evaluation"
-	"github.com/adescoteaux1/generate-oracle/internal/store"
-	"github.com/adescoteaux1/generate-oracle/internal/userauth"
+	"github.com/adescoteaux1/generate-control-tower/internal/evaluation"
+	"github.com/adescoteaux1/generate-control-tower/internal/store"
+	"github.com/adescoteaux1/generate-control-tower/internal/userauth"
 )
 
 // Server holds the dependencies operation handlers need.

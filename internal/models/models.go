@@ -18,22 +18,22 @@ const (
 // Legs is a normal single-hop trip; a voyage with N legs must complete them
 // in order, through separate gate assignments, before it counts as arrived.
 type VoyageLeg struct {
-	RequiredPower       int `json:"requiredPower"`
-	RequiredContainment int `json:"requiredContainment"`
-	EstimatedDuration   int `json:"estimatedDuration"`
+	RequiredPower       int `json:"requiredPower" doc:"Power this leg draws from its gate"`
+	RequiredContainment int `json:"requiredContainment" doc:"Containment this leg draws from its gate"`
+	EstimatedDuration   int `json:"estimatedDuration" doc:"Ticks this leg takes once assigned to a gate"`
 }
 
 // Voyage is a unit of travel requested by a traveler.
 type Voyage struct {
-	ID                  int    `json:"id"`
-	OriginHub           string `json:"originHub"`
-	Priority            int    `json:"priority"`          // 1 (low) - 5 (critical)
-	EstimatedDuration   int    `json:"estimatedDuration"` // ticks required while in transit (current leg, if multi-hop)
-	RequiredPower       int    `json:"requiredPower"`
-	RequiredContainment int    `json:"requiredContainment"`
-	ArrivalDeadline     int    `json:"arrivalDeadline"` // tick by which the voyage should arrive (whole trip)
-	Prerequisites       []int  `json:"prerequisites"`
-	RequestedTick       int    `json:"requestedTick"` // tick at which the voyage becomes visible
+	ID                  int    `json:"id" doc:"Unique voyage ID, used in assignments"`
+	OriginHub           string `json:"originHub" doc:"Hub this voyage departs from"`
+	Priority            int    `json:"priority" doc:"1 (low) to 5 (critical); not enforced by the Control Tower — what you do with it is up to your strategy"`
+	EstimatedDuration   int    `json:"estimatedDuration" doc:"Ticks required while in transit for the current leg (whole trip, if single-hop)"`
+	RequiredPower       int    `json:"requiredPower" doc:"Power the current leg draws from its gate"`
+	RequiredContainment int    `json:"requiredContainment" doc:"Containment the current leg draws from its gate"`
+	ArrivalDeadline     int    `json:"arrivalDeadline" doc:"Tick by which the whole trip should arrive; informational, not enforced by validation"`
+	Prerequisites       []int  `json:"prerequisites" doc:"Other voyage IDs that must reach 'arrived' before this voyage can become 'boarding'"`
+	RequestedTick       int    `json:"requestedTick" doc:"Tick at which this voyage becomes visible in the API"`
 
 	// Legs is the full planned corridor for a multi-hop voyage (empty for a
 	// normal single-hop voyage). LegIndex is which leg is current: the
@@ -41,33 +41,33 @@ type Voyage struct {
 	// RemainingDuration always describe *that* leg, so the rest of the
 	// engine (validator, resource accounting, gate-outage requeueing) needs
 	// no special multi-hop handling — it only ever sees "the current leg."
-	Legs     []VoyageLeg `json:"legs,omitempty"`
-	LegIndex int         `json:"legIndex,omitempty"`
+	Legs     []VoyageLeg `json:"legs" doc:"Full planned corridor for a multi-hop voyage; null for a normal single-hop voyage"`
+	LegIndex int         `json:"legIndex" doc:"Index into legs of the current leg; 0 for a normal single-hop voyage"`
 
 	// SLADeadline is non-nil only for voyages whose OriginHub is one of the
 	// cycle's PremiumHubs: a tighter internal deadline than ArrivalDeadline,
 	// used only for the slaCompliance metric (missing it doesn't reject
 	// scheduling, unlike ArrivalDeadline which is purely informational too).
-	SLADeadline *int `json:"slaDeadline,omitempty"`
+	SLADeadline *int `json:"slaDeadline" doc:"Tighter deadline than arrivalDeadline, only for premium-hub voyages; null otherwise. Feeds slaCompliance only — never enforced"`
 
-	Status            VoyageStatus `json:"status"`
-	RemainingDuration int          `json:"remainingDuration"`
-	AssignedGate      *int         `json:"assignedGate,omitempty"`
-	BoardingTick      *int         `json:"boardingTick,omitempty"` // tick prerequisites were satisfied
-	DepartureTick     *int         `json:"departureTick,omitempty"`
-	ArrivalTick       *int         `json:"arrivalTick,omitempty"`
+	Status            VoyageStatus `json:"status" enum:"awaiting_transfer,boarding,in_transit,arrived" doc:"awaiting_transfer: prerequisites incomplete. boarding: schedulable now. in_transit: assigned to a gate. arrived: done"`
+	RemainingDuration int          `json:"remainingDuration" doc:"Ticks left on the current leg"`
+	AssignedGate      *int         `json:"assignedGate" doc:"Gate ID this voyage is currently assigned to; null if not in transit"`
+	BoardingTick      *int         `json:"boardingTick" doc:"Tick this voyage's prerequisites were satisfied and it became schedulable"`
+	DepartureTick     *int         `json:"departureTick" doc:"Tick the current/most recent leg was assigned to a gate; null if never assigned"`
+	ArrivalTick       *int         `json:"arrivalTick" doc:"Tick the whole trip arrived; null until status is arrived"`
 }
 
 // Gate routes voyages and has finite power/containment capacity.
 type Gate struct {
-	ID                   int   `json:"id"`
-	TotalPower           int   `json:"totalPower"`
-	TotalContainment     int   `json:"totalContainment"`
-	AvailablePower       int   `json:"availablePower"`
-	AvailableContainment int   `json:"availableContainment"`
-	ActiveVoyages        []int `json:"activeVoyages"`
-	Operational          bool  `json:"operational"`
-	OfflineUntil         int   `json:"offlineUntil"` // tick at which the gate comes back online; internal bookkeeping
+	ID                   int   `json:"id" doc:"Unique gate ID, used in assignments"`
+	TotalPower           int   `json:"totalPower" doc:"Total power capacity, whether or not currently in use"`
+	TotalContainment     int   `json:"totalContainment" doc:"Total containment capacity, whether or not currently in use"`
+	AvailablePower       int   `json:"availablePower" doc:"Power currently free to assign"`
+	AvailableContainment int   `json:"availableContainment" doc:"Containment currently free to assign"`
+	ActiveVoyages        []int `json:"activeVoyages" doc:"IDs of voyages currently assigned to this gate"`
+	Operational          bool  `json:"operational" doc:"False while this gate is offline; assigning to it is rejected until it recovers"`
+	OfflineUntil         int   `json:"offlineUntil" doc:"Tick this gate comes back online; meaningless while operational is true"`
 }
 
 // Assignment is a single scheduling decision submitted by the client.
@@ -78,18 +78,18 @@ type Assignment struct {
 
 // Metrics is the set of category scores reported to the client.
 type Metrics struct {
-	Throughput      float64 `json:"throughput"`
-	GateUtilization float64 `json:"gateUtilization"`
-	ArrivalSuccess  float64 `json:"arrivalSuccess"`
-	Fairness        float64 `json:"fairness"`
-	Reliability     float64 `json:"reliability"`
-	SLACompliance   float64 `json:"slaCompliance"`
+	Throughput      float64 `json:"throughput" doc:"% of voyages that arrived"`
+	GateUtilization float64 `json:"gateUtilization" doc:"% of gate capacity kept busy"`
+	ArrivalSuccess  float64 `json:"arrivalSuccess" doc:"% of arrived voyages that beat their arrivalDeadline"`
+	Fairness        float64 `json:"fairness" doc:"Penalizes starving one origin hub's travelers to favor another"`
+	Reliability     float64 `json:"reliability" doc:"% of submitted assignments that were valid"`
+	SLACompliance   float64 `json:"slaCompliance" doc:"% of premium-hub voyages that beat their tighter slaDeadline"`
 }
 
 // Cycle is one independently-scored workload within an expedition.
 //
 // This struct is the full internal representation persisted to storage
-// between HTTP requests (the Oracle is stateless per-request). The public
+// between HTTP requests (the Control Tower is stateless per-request). The public
 // API response shape is a separate DTO built by the api package, which
 // exposes only the fields the spec calls for (and hides voyages that haven't
 // been requested yet).
@@ -167,7 +167,7 @@ type Expedition struct {
 }
 
 // User is an applicant who has registered to run expeditions against the
-// Oracle. NUID (Northeastern University ID) plus email double as the
+// Control Tower. NUID (Northeastern University ID) plus email double as the
 // registration credential pair; Token is the opaque bearer credential
 // issued at register/login time and required on every other endpoint.
 type User struct {

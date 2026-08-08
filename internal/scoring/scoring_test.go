@@ -3,7 +3,7 @@ package scoring
 import (
 	"testing"
 
-	"github.com/adescoteaux1/generate-oracle/internal/models"
+	"github.com/adescoteaux1/generate-control-tower/internal/models"
 )
 
 func TestCompute_ThroughputAndUtilization(t *testing.T) {

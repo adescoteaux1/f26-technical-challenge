@@ -1,4 +1,4 @@
-module github.com/adescoteaux1/generate-oracle
+module github.com/adescoteaux1/generate-control-tower
 
 go 1.25.5
 

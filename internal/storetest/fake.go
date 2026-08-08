@@ -16,8 +16,8 @@ import (
 	"encoding/json"
 	"sync"
 
-	"github.com/adescoteaux1/generate-oracle/internal/models"
-	"github.com/adescoteaux1/generate-oracle/internal/store"
+	"github.com/adescoteaux1/generate-control-tower/internal/models"
+	"github.com/adescoteaux1/generate-control-tower/internal/store"
 )
 
 // FakeStore is a minimal, mutex-guarded in-memory implementation of store.Store.
@@ -26,6 +26,13 @@ type FakeStore struct {
 	expeditions map[string]*store.ExpeditionRow
 	cycles      map[string]map[int][]byte // JSON-encoded models.Cycle
 	users       map[string]models.User    // keyed by user ID
+
+	// expeditionLocksMu guards expeditionLocks itself, kept separate from mu
+	// (which guards the data above) so WithExpeditionLock can hold a
+	// per-expedition lock for the duration of fn without deadlocking against
+	// the data methods fn calls back into (sync.Mutex isn't reentrant).
+	expeditionLocksMu sync.Mutex
+	expeditionLocks   map[string]*sync.Mutex
 }
 
 func New() *FakeStore {
@@ -190,6 +197,32 @@ func (f *FakeStore) SetUserToken(ctx context.Context, userID, token string) erro
 	u.Token = token
 	f.users[userID] = u
 	return nil
+}
+
+// WithExpeditionLock mirrors PostgresStore's advisory-lock behavior: fn runs
+// while holding an exclusive lock scoped to expeditionID, so tests can
+// exercise the same serialization guarantee without a live database. Locks
+// for different expedition IDs never contend with each other.
+func (f *FakeStore) WithExpeditionLock(ctx context.Context, expeditionID string, fn func(ctx context.Context) error) error {
+	lock := f.expeditionLock(expeditionID)
+	lock.Lock()
+	defer lock.Unlock()
+	return fn(ctx)
+}
+
+func (f *FakeStore) expeditionLock(expeditionID string) *sync.Mutex {
+	f.expeditionLocksMu.Lock()
+	defer f.expeditionLocksMu.Unlock()
+
+	if f.expeditionLocks == nil {
+		f.expeditionLocks = map[string]*sync.Mutex{}
+	}
+	lock, ok := f.expeditionLocks[expeditionID]
+	if !ok {
+		lock = &sync.Mutex{}
+		f.expeditionLocks[expeditionID] = lock
+	}
+	return lock
 }
 
 func (f *FakeStore) Close() {}

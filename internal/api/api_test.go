@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/adescoteaux1/generate-oracle/internal/storetest"
+	"github.com/adescoteaux1/generate-control-tower/internal/storetest"
 )
 
 func newTestServer() *httptest.Server {

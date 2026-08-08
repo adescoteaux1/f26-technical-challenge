@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"math/rand"
 
-	"github.com/adescoteaux1/generate-oracle/internal/models"
+	"github.com/adescoteaux1/generate-control-tower/internal/models"
 )
 
 // Profile names, exported so the expedition engine can sample from them.

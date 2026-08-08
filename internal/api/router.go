@@ -9,7 +9,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
-// NewRouter wires every Oracle endpoint through Huma, which generates an
+// NewRouter wires every Control Tower endpoint through Huma, which generates an
 // OpenAPI 3.1 spec from the Input/Output types in dto.go and serves it as
 // interactive Scalar docs at /docs (raw spec at /openapi.json|yaml).
 func NewRouter(s *Server) http.Handler {
@@ -27,8 +27,8 @@ func NewRouter(s *Server) http.Handler {
 	r.Get("/challenge", challengePageHandler)
 	r.Get("/frontend-challenge", frontendChallengePageHandler)
 
-	config := huma.DefaultConfig("Nexus Transit Authority — Oracle", "1.0.0")
-	config.Info.Description = "Scheduling challenge Oracle: register, start an expedition, " +
+	config := huma.DefaultConfig("Nexus Transit Authority — Control Tower", "1.0.0")
+	config.Info.Description = "Scheduling challenge Control Tower: register, start an expedition, " +
 		"and submit gate/voyage assignments each cycle tick."
 	config.DocsPath = "/docs"
 	config.DocsRenderer = huma.DocsRendererScalar

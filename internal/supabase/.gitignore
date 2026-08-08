@@ -1,0 +1,3 @@
+# Supabase CLI local state — machine-specific, not portable.
+.branches
+.temp

@@ -1,6 +1,6 @@
 """The "dumbest scheduler that still works" — a reference floor, not a target.
 
-Strategy: each tick, walk voyages in whatever order the Oracle returns them,
+Strategy: each tick, walk voyages in whatever order the Control Tower returns them,
 and assign every "boarding" voyage to the first operational gate (in ID
 order) with enough spare power/containment. No prioritization, no fairness,
 no deadline awareness. This is intentionally the naive baseline described in
@@ -17,7 +17,7 @@ is exactly why it won't score well on slaCompliance.
 
 from __future__ import annotations
 
-import oracle_client as oracle
+import control_tower_client as tower
 
 EMAIL = "simple-scheduler@internal.local"
 NUID = "000000001"
@@ -45,16 +45,16 @@ def decide_assignments(state: dict) -> list[dict]:
 
 
 def run() -> None:
-    token = oracle.login_or_register(EMAIL, NUID)
-    expedition = oracle.create_expedition(token)
+    token = tower.login_or_register(EMAIL, NUID)
+    expedition = tower.create_expedition(token)
     expedition_id = expedition["expeditionId"]
     print(f"expedition {expedition_id}: {expedition['totalCycles']} cycles")
 
-    state = oracle.get_expedition(token, expedition_id)
+    state = tower.get_expedition(token, expedition_id)
     ticks = 0
     while not state.get("finished"):
         assignments = decide_assignments(state)
-        state = oracle.submit_cycle(token, expedition_id, assignments)
+        state = tower.submit_cycle(token, expedition_id, assignments)
         ticks += 1
         if ticks % 200 == 0:
             print(f"  ...cycle {state.get('cycle')}/{state.get('totalCycles')}, "

@@ -9,8 +9,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/adescoteaux1/generate-oracle/internal/models"
-	"github.com/adescoteaux1/generate-oracle/migrations"
+	"github.com/adescoteaux1/generate-control-tower/internal/models"
+	"github.com/adescoteaux1/generate-control-tower/internal/supabase"
 )
 
 // PostgresStore is the Supabase/Postgres-backed Store implementation. Full
@@ -32,7 +32,11 @@ func NewPostgresStore(ctx context.Context, connString string) (*PostgresStore, e
 	if err := pool.Ping(ctx); err != nil {
 		return nil, fmt.Errorf("ping postgres: %w", err)
 	}
-	for _, stmt := range migrations.All() {
+	stmts, err := supabase.Migrations()
+	if err != nil {
+		return nil, fmt.Errorf("load migrations: %w", err)
+	}
+	for _, stmt := range stmts {
 		if _, err := pool.Exec(ctx, stmt); err != nil {
 			return nil, fmt.Errorf("run migrations: %w", err)
 		}
@@ -159,6 +163,35 @@ func saveCycleTx(ctx context.Context, tx pgx.Tx, cycle *models.Cycle) error {
 		return fmt.Errorf("upsert cycle: %w", err)
 	}
 	return nil
+}
+
+// WithExpeditionLock serializes concurrent Submit calls against the same
+// expedition using a Postgres transaction-scoped advisory lock, keyed by
+// expeditionID, held on a dedicated pooled connection for the duration of
+// fn. The lock is released automatically when the transaction ends
+// (commit on success, rollback otherwise), regardless of how fn returns.
+func (s *PostgresStore) WithExpeditionLock(ctx context.Context, expeditionID string, fn func(ctx context.Context) error) error {
+	conn, err := s.pool.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire connection for expedition lock: %w", err)
+	}
+	defer conn.Release()
+
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin expedition lock transaction: %w", err)
+	}
+	defer tx.Rollback(ctx) // no-op once committed; releases the advisory lock on any early return
+
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1)::bigint)`, expeditionID); err != nil {
+		return fmt.Errorf("acquire expedition lock: %w", err)
+	}
+
+	if err := fn(ctx); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
 }
 
 func (s *PostgresStore) AdvanceExpedition(ctx context.Context, expeditionID string, nextCycle int) error {
