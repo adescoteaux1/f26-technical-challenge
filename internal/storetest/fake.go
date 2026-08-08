@@ -16,8 +16,8 @@ import (
 	"encoding/json"
 	"sync"
 
-	"github.com/adescoteaux1/generate-oracle/internal/models"
-	"github.com/adescoteaux1/generate-oracle/internal/store"
+	"github.com/adescoteaux1/generate-control-tower/internal/models"
+	"github.com/adescoteaux1/generate-control-tower/internal/store"
 )
 
 // FakeStore is a minimal, mutex-guarded in-memory implementation of store.Store.

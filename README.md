@@ -1,6 +1,6 @@
-# Generate Cloud Scheduler — Oracle Server
+# Generate Cloud Scheduler — Control Tower Server
 
-This is the **Oracle**: the simulation/expedition server that a scheduler
+This is the **Control Tower**: the simulation/expedition server that a scheduler
 client talks to over REST. It generates workloads, simulates transit tick
 by tick, validates scheduling decisions, and scores performance across
 multiple independent cycles per expedition.
@@ -30,7 +30,7 @@ PORT=8080
 ### Run
 
 ```bash
-go run ./cmd/oracle
+go run ./cmd/controltower
 ```
 
 On startup the server connects to Postgres and runs its embedded schema
@@ -38,7 +38,7 @@ migration automatically (`CREATE TABLE IF NOT EXISTS ...` — safe to run every
 time, no separate migration step needed). You should see:
 
 ```
-level=INFO msg="oracle server listening" port=8080
+level=INFO msg="control tower server listening" port=8080
 ```
 
 ### Test
@@ -82,7 +82,7 @@ a service whose only clients are scheduler programs, not browsers.
 
 ## Site pages
 
-The Oracle also serves a small static site (`site/`, plus `internal/api/pages.go`)
+The Control Tower also serves a small static site (`site/`, plus `internal/api/pages.go`)
 alongside the API — a landing page and one rendered page per challenge:
 
 - **`/`** — landing page linking to both the frontend and backend
@@ -169,7 +169,7 @@ tick's applied decisions.
 ## Project organization
 
 ```
-cmd/oracle/            entrypoint: config, DB connection, HTTP server, graceful shutdown
+cmd/controltower/      entrypoint: config, DB connection, HTTP server, graceful shutdown
 internal/
   models/              core domain types (Voyage, Gate, Cycle, Expedition, User) — no logic
   generator/           Workload Generator: 6 workload profiles, DAG-respecting voyage generation

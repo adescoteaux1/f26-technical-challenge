@@ -1,4 +1,4 @@
-// Package api exposes the Oracle's endpoints via Huma, which generates an
+// Package api exposes the Control Tower's endpoints via Huma, which generates an
 // OpenAPI 3.1 spec (and Scalar docs UI) directly from the Input/Output
 // types and struct tags below — no hand-written spec to keep in sync.
 package api
@@ -6,9 +6,9 @@ package api
 import (
 	"time"
 
-	"github.com/adescoteaux1/generate-oracle/internal/engine"
-	"github.com/adescoteaux1/generate-oracle/internal/models"
-	"github.com/adescoteaux1/generate-oracle/internal/store"
+	"github.com/adescoteaux1/generate-control-tower/internal/engine"
+	"github.com/adescoteaux1/generate-control-tower/internal/models"
+	"github.com/adescoteaux1/generate-control-tower/internal/store"
 )
 
 // --- Request/response bodies ---

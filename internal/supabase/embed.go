@@ -1,5 +1,5 @@
 // Package supabase embeds this project's Supabase CLI-managed migrations
-// (internal/supabase/migrations/*.sql) so the Oracle can apply them on
+// (internal/supabase/migrations/*.sql) so the Control Tower can apply them on
 // startup without a separate migration tool or manual `psql` step.
 //
 // The glob pattern picks up every .sql file in the directory, so a new

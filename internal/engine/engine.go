@@ -7,7 +7,7 @@ package engine
 import (
 	"math/rand"
 
-	"github.com/adescoteaux1/generate-oracle/internal/models"
+	"github.com/adescoteaux1/generate-control-tower/internal/models"
 )
 
 // AdvanceTick moves the cycle forward by one tick:

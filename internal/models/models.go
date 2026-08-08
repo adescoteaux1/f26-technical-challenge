@@ -27,7 +27,7 @@ type VoyageLeg struct {
 type Voyage struct {
 	ID                  int    `json:"id" doc:"Unique voyage ID, used in assignments"`
 	OriginHub           string `json:"originHub" doc:"Hub this voyage departs from"`
-	Priority            int    `json:"priority" doc:"1 (low) to 5 (critical); not enforced by the Oracle — what you do with it is up to your strategy"`
+	Priority            int    `json:"priority" doc:"1 (low) to 5 (critical); not enforced by the Control Tower — what you do with it is up to your strategy"`
 	EstimatedDuration   int    `json:"estimatedDuration" doc:"Ticks required while in transit for the current leg (whole trip, if single-hop)"`
 	RequiredPower       int    `json:"requiredPower" doc:"Power the current leg draws from its gate"`
 	RequiredContainment int    `json:"requiredContainment" doc:"Containment the current leg draws from its gate"`
@@ -89,7 +89,7 @@ type Metrics struct {
 // Cycle is one independently-scored workload within an expedition.
 //
 // This struct is the full internal representation persisted to storage
-// between HTTP requests (the Oracle is stateless per-request). The public
+// between HTTP requests (the Control Tower is stateless per-request). The public
 // API response shape is a separate DTO built by the api package, which
 // exposes only the fields the spec calls for (and hides voyages that haven't
 // been requested yet).
@@ -167,7 +167,7 @@ type Expedition struct {
 }
 
 // User is an applicant who has registered to run expeditions against the
-// Oracle. NUID (Northeastern University ID) plus email double as the
+// Control Tower. NUID (Northeastern University ID) plus email double as the
 // registration credential pair; Token is the opaque bearer credential
 // issued at register/login time and required on every other endpoint.
 type User struct {

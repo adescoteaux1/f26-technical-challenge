@@ -1,4 +1,4 @@
-"""Thin HTTP client for the Oracle, shared by both example schedulers.
+"""Thin HTTP client for the Control Tower, shared by both example schedulers.
 
 Deliberately minimal: this is the "plumbing" half of a scheduler client
 (register/login, poll state, submit assignments), kept separate from
@@ -13,11 +13,11 @@ from typing import Any
 
 import requests
 
-BASE_URL = os.environ.get("ORACLE_BASE_URL", "http://localhost:8080")
+BASE_URL = os.environ.get("CONTROL_TOWER_BASE_URL", "http://localhost:8080")
 
 
-class OracleError(RuntimeError):
-    """Raised when the Oracle returns a non-2xx response."""
+class ControlTowerError(RuntimeError):
+    """Raised when the Control Tower returns a non-2xx response."""
 
 
 def _request(method: str, path: str, token: str | None = None, json_body: Any = None) -> Any:
@@ -29,7 +29,7 @@ def _request(method: str, path: str, token: str | None = None, json_body: Any = 
             detail = resp.json().get("detail", resp.text)
         except ValueError:
             pass
-        raise OracleError(f"{method} {path} -> {resp.status_code}: {detail}")
+        raise ControlTowerError(f"{method} {path} -> {resp.status_code}: {detail}")
     if resp.status_code == 204 or not resp.content:
         return None
     return resp.json()
@@ -39,7 +39,7 @@ def login_or_register(email: str, nuid: str) -> str:
     """Logs in if the account already exists, otherwise registers it. Returns a bearer token."""
     try:
         return _request("POST", "/login", json_body={"email": email, "nuid": nuid})["token"]
-    except OracleError:
+    except ControlTowerError:
         return _request("POST", "/register", json_body={"email": email, "nuid": nuid})["token"]
 
 

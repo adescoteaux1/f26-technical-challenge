@@ -3,7 +3,7 @@ package engine
 import (
 	"fmt"
 
-	"github.com/adescoteaux1/generate-oracle/internal/models"
+	"github.com/adescoteaux1/generate-control-tower/internal/models"
 )
 
 // RejectedAssignment pairs a submitted assignment with why it was rejected,

@@ -3,7 +3,7 @@ package generator
 import (
 	"testing"
 
-	"github.com/adescoteaux1/generate-oracle/internal/models"
+	"github.com/adescoteaux1/generate-control-tower/internal/models"
 )
 
 func TestGenerate_UnknownProfileErrors(t *testing.T) {

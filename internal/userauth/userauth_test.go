@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/adescoteaux1/generate-oracle/internal/store"
-	"github.com/adescoteaux1/generate-oracle/internal/storetest"
+	"github.com/adescoteaux1/generate-control-tower/internal/store"
+	"github.com/adescoteaux1/generate-control-tower/internal/storetest"
 )
 
 func TestRegister_CreatesUserWithToken(t *testing.T) {

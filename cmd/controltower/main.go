@@ -1,4 +1,4 @@
-// Command oracle runs the Generate Cloud Scheduler Oracle server.
+// Command controltower runs the Generate Cloud Scheduler Control Tower server.
 package main
 
 import (
@@ -10,9 +10,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/adescoteaux1/generate-oracle/internal/api"
-	"github.com/adescoteaux1/generate-oracle/internal/config"
-	"github.com/adescoteaux1/generate-oracle/internal/store"
+	"github.com/adescoteaux1/generate-control-tower/internal/api"
+	"github.com/adescoteaux1/generate-control-tower/internal/config"
+	"github.com/adescoteaux1/generate-control-tower/internal/store"
 )
 
 func main() {
@@ -41,7 +41,7 @@ func main() {
 	}
 
 	go func() {
-		logger.Info("oracle server listening", "port", cfg.Port)
+		logger.Info("control tower server listening", "port", cfg.Port)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Error("server error", "error", err)
 			os.Exit(1)

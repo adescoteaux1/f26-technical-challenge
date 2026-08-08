@@ -1,5 +1,5 @@
 // Package userauth handles applicant registration and login: issuing and
-// rotating the bearer tokens required by every other Oracle endpoint.
+// rotating the bearer tokens required by every other Control Tower endpoint.
 package userauth
 
 import (
@@ -9,9 +9,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/adescoteaux1/generate-oracle/internal/auth"
-	"github.com/adescoteaux1/generate-oracle/internal/models"
-	"github.com/adescoteaux1/generate-oracle/internal/store"
+	"github.com/adescoteaux1/generate-control-tower/internal/auth"
+	"github.com/adescoteaux1/generate-control-tower/internal/models"
+	"github.com/adescoteaux1/generate-control-tower/internal/store"
 )
 
 // ErrInvalidCredentials is returned when the email/NUID pair on login

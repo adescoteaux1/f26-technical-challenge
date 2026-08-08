@@ -6,7 +6,7 @@ someone game the rubric if they saw it in advance.
 
 This guide is for whoever sits in on an applicant's walkthrough of their
 scheduler submission. It assumes you've read `CHALLENGE.md` (what the
-applicant was given) but may not have touched the Oracle's internals
+applicant was given) but may not have touched the Control Tower's internals
 recently.
 
 ---
@@ -25,7 +25,7 @@ The submission has four required parts (`CHALLENGE.md` §8) — code,
 `README.md`, `DESIGN.md`, tests — and all four are fair game to probe, not
 just the code.
 
-## 2. The Oracle, briefly
+## 2. The Control Tower, briefly
 
 You don't need to re-derive this from source during an interview, but here's
 the map if a question comes up:
@@ -128,7 +128,7 @@ got and how deliberately.
 
 **Core mechanics — checks for actual engagement vs. lucky defaults**
 - "How do you make sure you don't over-commit a gate within one batch?"
-  (The Oracle checks capacity across the *whole submitted batch*, not
+  (The Control Tower checks capacity across the *whole submitted batch*, not
   assignment-by-assignment — a submission that doesn't track this locally
   would see rejections and should have noticed.)
 - "What does your scheduler do when a gate goes offline mid-voyage?" A
@@ -156,16 +156,16 @@ got and how deliberately.
 - "What was your first working version, and what's different now?" Wants a
   specific story with before/after numbers, not "I refactored for
   cleanliness." `DESIGN.md`'s own Iteration section (this repo's, about the
-  Oracle) is a good model of the level of specificity to look for.
+  Control Tower) is a good model of the level of specificity to look for.
 - "What did you deliberately *not* do, and why?" A thoughtful "not
   optimized for X because Y" answer is a stronger signal than someone who
   claims to have optimized everything.
 - "Show me a test you're proud of, and one you decided not to write."
   Per `CHALLENGE.md` §9 step 2: can they test scheduling logic without a
-  live Oracle connection? If not, that's a sign the decision logic is
+  live Control Tower connection? If not, that's a sign the decision logic is
   tangled up with the HTTP layer.
 - If they attempted the retry/resilience extension (`CHALLENGE.md` §10):
-  "What do you do if a request times out but the Oracle actually applied
+  "What do you do if a request times out but the Control Tower actually applied
   it?" Listen for "I re-check state before resubmitting," not "I just
   retry the same request."
 
@@ -176,7 +176,7 @@ got and how deliberately.
 - Can't explain *any* tradeoff — everything is framed as strictly better
   with no cost, which usually means they didn't actually compare.
 - No awareness of gate outages or the `rejected` array at all.
-- Tests that only run against a live Oracle (can't test decision logic in
+- Tests that only run against a live Control Tower (can't test decision logic in
   isolation) — a specific "your scheduling logic is too tangled with your
   HTTP code" smell called out directly in `CHALLENGE.md` §9.
 - `DESIGN.md` that reads like it was written in one sitting at the end —
@@ -185,7 +185,7 @@ got and how deliberately.
   entirely) — either one means they didn't engage with the tension the
   feature exists to create.
 
-## 7. Current Oracle state (as of 2026-08-08)
+## 7. Current Control Tower state (as of 2026-08-08)
 
 Two things changed recently that are worth knowing if you're comparing
 notes with an older interview or a candidate's earlier test runs:
@@ -210,6 +210,6 @@ notes with an older interview or a candidate's earlier test runs:
 `examples-internal/simple_scheduler.py` and `better_scheduler.py` are the
 two reference points behind §4's numbers. Re-running them occasionally
 (`cd examples-internal && python simple_scheduler.py`) against the current
-Oracle is a good sanity check if a batch of interviews starts producing
-scores that don't match this guide's expectations — the Oracle's tuning
+Control Tower is a good sanity check if a batch of interviews starts producing
+scores that don't match this guide's expectations — the Control Tower's tuning
 could have drifted, not just the applicant pool.

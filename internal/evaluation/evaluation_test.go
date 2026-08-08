@@ -5,8 +5,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/adescoteaux1/generate-oracle/internal/models"
-	"github.com/adescoteaux1/generate-oracle/internal/storetest"
+	"github.com/adescoteaux1/generate-control-tower/internal/models"
+	"github.com/adescoteaux1/generate-control-tower/internal/storetest"
 )
 
 const testUserID = "test-user-1"

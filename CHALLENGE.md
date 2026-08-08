@@ -5,12 +5,12 @@ That's you.
 
 You'll build a **scheduler**: a program that decides which voyages depart
 through which portal gates, and in what order. It talks over HTTP to a
-server we call the **Oracle**, which generates the transit demand,
+server we call the **Control Tower**, which generates the transit demand,
 simulates the network, and scores how you did.
 
 **You have total freedom on implementation.** Any language, any libraries,
 any architecture, any project structure. The only hard requirement is that
-your program speaks HTTP/JSON to the Oracle correctly.
+your program speaks HTTP/JSON to the Control Tower correctly.
 
 ---
 
@@ -37,7 +37,7 @@ run multiple voyages at once if there's room, and can occasionally drop
 offline mid-shift.
 
 Every tick, your scheduler decides which voyages that are ready to board
-get assigned to which gates. The Oracle handles everything else: advancing
+get assigned to which gates. The Control Tower handles everything else: advancing
 the clock, running voyages to arrival, unlocking transfers, generating new
 transit demand, and tracking your score.
 
@@ -53,7 +53,7 @@ and pushing hard on one usually costs you on another.
 Register once:
 
 ```bash
-curl -X POST <ORACLE_BASE_URL>/register \
+curl -X POST <CONTROL_TOWER_BASE_URL>/register \
   -H 'Content-Type: application/json' \
   -d '{"email": "you@example.com", "nuid": "001234567"}'
 ```
@@ -75,7 +75,7 @@ Everything you run is tied to your account, and you can look back at your
 own history any time:
 
 ```bash
-curl <ORACLE_BASE_URL>/me/expeditions -H "Authorization: Bearer $TOKEN"
+curl <CONTROL_TOWER_BASE_URL>/me/expeditions -H "Authorization: Bearer $TOKEN"
 ```
 
 Run as many expeditions as you want while you iterate. Only your final
@@ -90,7 +90,7 @@ Running an expedition looks like this:
 
 1. **Start** one (`POST /expedition`). This gives you an `expeditionId`
    that covers the whole 16-cycle run — you don't start a new one per
-   cycle. The Oracle moves through all 16 under the same ID and tells you
+   cycle. The Control Tower moves through all 16 under the same ID and tells you
    when it advances (see §6).
 2. **Read** the current state (`GET /expedition/{id}`): tick, gates,
    voyages, running metrics.
@@ -152,7 +152,7 @@ you build out any real strategy.
 - `status` is one of `awaiting_transfer` (prerequisites incomplete),
   `boarding` (schedulable now), `in_transit` (assigned to a gate),
   `arrived` (done).
-- `priority` runs 1 (low) to 5 (critical). The Oracle doesn't enforce
+- `priority` runs 1 (low) to 5 (critical). The Control Tower doesn't enforce
   anything based on it — what you do with it is up to your strategy.
 - `arrivalDeadline` and `requestedTick` are simulation tick numbers, not
   wall-clock time.
@@ -187,7 +187,7 @@ you build out any real strategy.
 - Gates can go temporarily offline (a rift destabilization). While
   `operational` is `false` you can't assign it new work, and any voyages
   that were in transit through it get kicked back to `boarding` — progress
-  preserved, assignment lost. The Oracle doesn't reschedule them for you.
+  preserved, assignment lost. The Control Tower doesn't reschedule them for you.
   A scheduler that never notices a gate went offline will quietly bleed
   score.
 
@@ -258,7 +258,7 @@ them additionally carries an `slaDeadline`, always tighter than its
 {"id": 91, "originHub": "quantum-nexus", "arrivalDeadline": 60, "slaDeadline": 40}
 ```
 
-`slaDeadline` doesn't affect validation — the Oracle will happily let you
+`slaDeadline` doesn't affect validation — the Control Tower will happily let you
 schedule a premium voyage as late as you want, same as any other. It only
 feeds the `slaCompliance` metric (see §7): the fraction of premium-hub
 voyages that beat their SLA window, not just their regular deadline. This
@@ -290,7 +290,7 @@ Every expedition repeats full passes through all six profiles as many
 times as fit (16 cycles is two full passes plus a partial third), draws any
 leftover cycles from a shuffled partial pass rather than fully at random,
 and shuffles the final order, so no single profile can dominate an
-expedition by luck. When one cycle finishes, the Oracle automatically
+expedition by luck. When one cycle finishes, the Control Tower automatically
 starts the next — keep polling and scheduling against the same
 `expeditionId` throughout. When all 16 are done, you get:
 
@@ -327,7 +327,7 @@ where it's visible, your commit/expedition history), and your final
 scores.
 
 1. **A working scheduler** that runs one or more full expeditions against
-   the Oracle end to end.
+   the Control Tower end to end.
 2. **`README.md`** — setup, how to run it, dependencies, project layout.
    Assume the reader has never seen your project before.
 3. **`DESIGN.md`** (max 2 pages) — not a tour of every class, but how you
@@ -355,11 +355,11 @@ to solve in one sitting:
    the dumbest possible logic. Confirm you can see `finished: true`.
 2. **Write a test for your assignment logic in isolation.** Feed it a
    handful of fake voyages and gates, assert what it decides, without a
-   live Oracle connection. If that's awkward to write, that's a sign your
+   live Control Tower connection. If that's awkward to write, that's a sign your
    scheduling logic is too tangled up with your HTTP code.
 3. **Make the strategy swappable.** Even if you only ever write one
    strategy, structure it so a second one could exist. It's a good forcing
-   function for a clean interface between "talk to the Oracle" and "decide
+   function for a clean interface between "talk to the Control Tower" and "decide
    what to schedule."
 4. **Iterate on the decision logic itself.** Try a real prioritization
    rule (earliest deadline, or highest priority), see what it does to your
@@ -382,14 +382,14 @@ to solve in one sitting:
 This has nothing to do with scheduling logic, and nothing here requires
 it — a request either succeeds or it doesn't, and the loop in §4 works
 fine without any of this. But if you want to push further: treat the
-Oracle like the real, occasionally-flaky network dependency it is. A
+Control Tower like the real, occasionally-flaky network dependency it is. A
 client that retries transient failures with backoff, and re-checks state
 rather than blindly resubmitting after an ambiguous failure (a request can
-fail on your end after the Oracle already applied it), is worth showing
+fail on your end after the Control Tower already applied it), is worth showing
 off if you have time for it.
 
 To let you actually build and test this instead of just asserting it
-works, the Oracle exposes a separate endpoint that simulates failure modes
+works, the Control Tower exposes a separate endpoint that simulates failure modes
 deterministically, with no server-side session state and no connection to
 any expedition or score:
 

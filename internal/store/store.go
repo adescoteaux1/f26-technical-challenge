@@ -1,5 +1,5 @@
 // Package store persists expedition, cycle, and user state between HTTP
-// requests. The Oracle is stateless per-request, so every tick's state must
+// requests. The Control Tower is stateless per-request, so every tick's state must
 // round-trip through here.
 package store
 
@@ -8,7 +8,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/adescoteaux1/generate-oracle/internal/models"
+	"github.com/adescoteaux1/generate-control-tower/internal/models"
 )
 
 // ErrNotFound is returned when an expedition, cycle, or user does not exist.

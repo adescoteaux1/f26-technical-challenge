@@ -1,5 +1,5 @@
 // Package site embeds the static documentation pages served alongside the
-// Oracle API: a landing page linking to both challenges, and the shared
+// Control Tower API: a landing page linking to both challenges, and the shared
 // stylesheet. The challenge spec page itself is rendered from CHALLENGE.md
 // at request time (see internal/api/pages.go), not embedded here, so
 // editing that file takes effect on the next request with no rebuild.

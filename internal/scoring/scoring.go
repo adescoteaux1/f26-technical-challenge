@@ -7,13 +7,13 @@ package scoring
 import (
 	"math"
 
-	"github.com/adescoteaux1/generate-oracle/internal/models"
+	"github.com/adescoteaux1/generate-control-tower/internal/models"
 )
 
 // Weights used to combine category scores into the overall score. These are
 // intentionally not exposed through the API (mirrors "the exact scoring
 // formula is intentionally not published"), but are centralized here so
-// they're easy to tune during Oracle development.
+// they're easy to tune during Control Tower development.
 const (
 	weightThroughput  = 0.20
 	weightUtilization = 0.15

@@ -9,8 +9,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/adescoteaux1/generate-oracle/internal/models"
-	"github.com/adescoteaux1/generate-oracle/internal/supabase"
+	"github.com/adescoteaux1/generate-control-tower/internal/models"
+	"github.com/adescoteaux1/generate-control-tower/internal/supabase"
 )
 
 // PostgresStore is the Supabase/Postgres-backed Store implementation. Full

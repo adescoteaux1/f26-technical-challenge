@@ -13,11 +13,11 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/adescoteaux1/generate-oracle/internal/engine"
-	"github.com/adescoteaux1/generate-oracle/internal/generator"
-	"github.com/adescoteaux1/generate-oracle/internal/models"
-	"github.com/adescoteaux1/generate-oracle/internal/scoring"
-	"github.com/adescoteaux1/generate-oracle/internal/store"
+	"github.com/adescoteaux1/generate-control-tower/internal/engine"
+	"github.com/adescoteaux1/generate-control-tower/internal/generator"
+	"github.com/adescoteaux1/generate-control-tower/internal/models"
+	"github.com/adescoteaux1/generate-control-tower/internal/scoring"
+	"github.com/adescoteaux1/generate-control-tower/internal/store"
 )
 
 // DefaultTotalCycles is how many cycles make up one expedition. With 6
