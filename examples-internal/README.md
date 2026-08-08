@@ -6,6 +6,12 @@ submission. **These are internal-only.** If this repo or `CHALLENGE.md` is
 ever handed to applicants, this folder must be stripped out first — it's an
 answer key.
 
+If you're prepping to sit in on an applicant's walkthrough, see
+[`INTERVIEWER_GUIDE.md`](INTERVIEWER_GUIDE.md) instead — it covers the
+scoring weights, score calibration, a suggested question bank, and red
+flags. This file is background for *why* those reference numbers are what
+they are.
+
 - `simple_scheduler.py` — a naive, greedy scheduler: assign any boarding
   voyage to the first gate with room, in ID order. No prioritization, no
   fairness, no awareness of gate outages beyond correctness, and no idea
