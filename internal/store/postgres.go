@@ -165,6 +165,35 @@ func saveCycleTx(ctx context.Context, tx pgx.Tx, cycle *models.Cycle) error {
 	return nil
 }
 
+// WithExpeditionLock serializes concurrent Submit calls against the same
+// expedition using a Postgres transaction-scoped advisory lock, keyed by
+// expeditionID, held on a dedicated pooled connection for the duration of
+// fn. The lock is released automatically when the transaction ends
+// (commit on success, rollback otherwise), regardless of how fn returns.
+func (s *PostgresStore) WithExpeditionLock(ctx context.Context, expeditionID string, fn func(ctx context.Context) error) error {
+	conn, err := s.pool.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire connection for expedition lock: %w", err)
+	}
+	defer conn.Release()
+
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin expedition lock transaction: %w", err)
+	}
+	defer tx.Rollback(ctx) // no-op once committed; releases the advisory lock on any early return
+
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1)::bigint)`, expeditionID); err != nil {
+		return fmt.Errorf("acquire expedition lock: %w", err)
+	}
+
+	if err := fn(ctx); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
 func (s *PostgresStore) AdvanceExpedition(ctx context.Context, expeditionID string, nextCycle int) error {
 	_, err := s.pool.Exec(ctx, `UPDATE expeditions SET current_cycle = $2 WHERE id = $1`, expeditionID, nextCycle)
 	return err

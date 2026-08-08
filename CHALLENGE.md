@@ -112,6 +112,10 @@ Running an expedition looks like this:
 - **Handling for partial rejection.** A submitted batch can succeed in
   part and fail in part; check the response to see what actually landed.
 
+The `overallScore` and `metrics` you get back once `finished: true` are
+each the plain average of that same value across all 16 cycles, not a
+sum — see §7.
+
 Start with the simplest scheduling rule you can think of to prove the
 plumbing works end to end. Use that as your baseline for testing before
 you build out any real strategy.

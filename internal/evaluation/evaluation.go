@@ -90,37 +90,54 @@ type SubmitResult struct {
 // expedition's current cycle, advances the cycle clock by one
 // tick, and — when that cycle finishes — either rolls over to the next
 // profile in the sequence or finalizes the expedition's aggregate score.
+//
+// The whole read-modify-write runs under st.WithExpeditionLock: it spans
+// several independent store calls (GetExpedition, GetCycle, SaveCycle,
+// AdvanceExpedition/FinishExpedition), and without a lock scoped to this
+// expedition, two overlapping submissions (e.g. a retried request racing
+// the original) could both read the same tick and the later save would
+// silently clobber the earlier one's result.
 func Submit(ctx context.Context, st store.Store, expeditionID, userID string, assignments []models.Assignment) (*SubmitResult, error) {
-	row, err := st.GetExpedition(ctx, expeditionID)
+	var result *SubmitResult
+	err := st.WithExpeditionLock(ctx, expeditionID, func(ctx context.Context) error {
+		row, err := st.GetExpedition(ctx, expeditionID)
+		if err != nil {
+			return err
+		}
+		if row.UserID != userID {
+			return ErrForbidden
+		}
+		if row.Finished {
+			result = &SubmitResult{Expedition: row}
+			return nil
+		}
+
+		cycle, err := st.GetCycle(ctx, expeditionID, row.CurrentCycle)
+		if err != nil {
+			return err
+		}
+
+		scheduleResult := engine.ValidateAndApply(cycle, assignments)
+		engine.AdvanceTick(cycle)
+		cycle.Metrics, cycle.Score = scoring.Compute(cycle)
+
+		if err := st.SaveCycle(ctx, cycle); err != nil {
+			return fmt.Errorf("persist cycle: %w", err)
+		}
+
+		if !cycle.Finished {
+			row.CurrentCycle = cycle.Number
+			result = &SubmitResult{Expedition: row, Cycle: cycle, Rejected: scheduleResult.Rejected}
+			return nil
+		}
+
+		result, err = advancePastFinishedCycle(ctx, st, row, cycle, scheduleResult.Rejected)
+		return err
+	})
 	if err != nil {
 		return nil, err
 	}
-	if row.UserID != userID {
-		return nil, ErrForbidden
-	}
-	if row.Finished {
-		return &SubmitResult{Expedition: row}, nil
-	}
-
-	cycle, err := st.GetCycle(ctx, expeditionID, row.CurrentCycle)
-	if err != nil {
-		return nil, err
-	}
-
-	scheduleResult := engine.ValidateAndApply(cycle, assignments)
-	engine.AdvanceTick(cycle)
-	cycle.Metrics, cycle.Score = scoring.Compute(cycle)
-
-	if err := st.SaveCycle(ctx, cycle); err != nil {
-		return nil, fmt.Errorf("persist cycle: %w", err)
-	}
-
-	if !cycle.Finished {
-		row.CurrentCycle = cycle.Number
-		return &SubmitResult{Expedition: row, Cycle: cycle, Rejected: scheduleResult.Rejected}, nil
-	}
-
-	return advancePastFinishedCycle(ctx, st, row, cycle, scheduleResult.Rejected)
+	return result, nil
 }
 
 func advancePastFinishedCycle(

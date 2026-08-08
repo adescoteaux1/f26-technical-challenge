@@ -150,6 +150,8 @@ curl -X POST localhost:8080/cycle/<id>/schedule \
 
 # Eventually:
 # {"finished":true,"overallScore":84.2,"metrics":{...}}
+# overallScore and metrics here are each the plain average of that
+# cycle-level value across all 16 cycles, not a sum — see "Scoring" below.
 
 # 4. Check your history any time
 curl localhost:8080/me/expeditions -H "Authorization: Bearer $TOKEN"
