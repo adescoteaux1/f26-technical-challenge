@@ -39,11 +39,11 @@ func toAuthResponse(user *models.User) authResponse {
 
 // historyItem is one row of a user's expedition history.
 type historyItem struct {
-	ExpeditionID string         `json:"expeditionId"`
-	Finished     bool           `json:"finished"`
-	OverallScore float64        `json:"overallScore"`
-	Metrics      models.Metrics `json:"metrics"`
-	CreatedAt    time.Time      `json:"createdAt"`
+	ExpeditionID string         `json:"expeditionId" doc:"Expedition ID, usable with GET /expedition/{id}"`
+	Finished     bool           `json:"finished" doc:"Whether all 16 cycles have completed"`
+	OverallScore float64        `json:"overallScore" doc:"Average overall score across all 16 cycles; 0 until finished is true"`
+	Metrics      models.Metrics `json:"metrics" doc:"Average of each metric across all 16 cycles; zero-valued until finished is true"`
+	CreatedAt    time.Time      `json:"createdAt" doc:"When this expedition was started"`
 }
 
 func toHistoryItem(s store.ExpeditionSummary) historyItem {
@@ -58,17 +58,17 @@ func toHistoryItem(s store.ExpeditionSummary) historyItem {
 
 // createExpeditionResponse is returned by POST /expedition.
 type createExpeditionResponse struct {
-	ExpeditionID string `json:"expeditionId"`
-	Cycle        int    `json:"cycle"`
-	TotalCycles  int    `json:"totalCycles"`
+	ExpeditionID string `json:"expeditionId" doc:"ID for this expedition; use it in GET /expedition/{id} and POST /cycle/{id}/schedule for its whole 16-cycle run"`
+	Cycle        int    `json:"cycle" doc:"Current cycle number, 1-indexed"`
+	TotalCycles  int    `json:"totalCycles" doc:"Total number of cycles in this expedition (16)"`
 }
 
 // rejectedVoyageView surfaces why a submitted assignment was skipped,
 // so applicants can debug their scheduler ("descriptive errors" per spec).
 type rejectedVoyageView struct {
-	GateID   int    `json:"gateId"`
-	VoyageID int    `json:"voyageId"`
-	Reason   string `json:"reason"`
+	GateID   int    `json:"gateId" doc:"Gate ID from the rejected assignment"`
+	VoyageID int    `json:"voyageId" doc:"Voyage ID from the rejected assignment"`
+	Reason   string `json:"reason" doc:"Human-readable reason this specific assignment was not applied"`
 }
 
 // expeditionStateResponse is returned by GET /expedition/{id} and
@@ -78,20 +78,20 @@ type rejectedVoyageView struct {
 // Voyages that have not yet been requested are omitted entirely (see
 // models.Cycle.VisibleVoyages).
 type expeditionStateResponse struct {
-	Finished     bool                 `json:"finished"`
-	ExpeditionID string               `json:"expeditionId,omitempty"`
-	Cycle        int                  `json:"cycle,omitempty"`
-	TotalCycles  int                  `json:"totalCycles,omitempty"`
-	Profile      string               `json:"profile,omitempty"`
-	Tick         int                  `json:"tick"`
-	MaxTicks     int                  `json:"maxTicks,omitempty"`
-	Gates        []*models.Gate       `json:"gates,omitempty"`
-	Voyages      []*models.Voyage     `json:"voyages,omitempty"`
-	PremiumHubs  []string             `json:"premiumHubs,omitempty"`
-	Score        float64              `json:"score,omitempty"`
-	Metrics      models.Metrics       `json:"metrics"`
-	Rejected     []rejectedVoyageView `json:"rejected,omitempty"`
-	OverallScore float64              `json:"overallScore,omitempty"`
+	Finished     bool                 `json:"finished" doc:"True once all 16 cycles are complete; when true, only finished/overallScore/metrics are populated"`
+	ExpeditionID string               `json:"expeditionId,omitempty" doc:"Expedition ID (omitted once finished)"`
+	Cycle        int                  `json:"cycle,omitempty" doc:"Current cycle number, 1-indexed (omitted once finished)"`
+	TotalCycles  int                  `json:"totalCycles,omitempty" doc:"Total number of cycles in this expedition (omitted once finished)"`
+	Profile      string               `json:"profile,omitempty" doc:"Current cycle's workload profile, e.g. narrow_window (omitted once finished)"`
+	Tick         int                  `json:"tick" doc:"Current tick within the cycle"`
+	MaxTicks     int                  `json:"maxTicks,omitempty" doc:"Tick at which the current cycle force-finishes regardless of remaining voyages (omitted once finished)"`
+	Gates        []*models.Gate       `json:"gates,omitempty" doc:"Every gate in the current cycle (omitted once finished)"`
+	Voyages      []*models.Voyage     `json:"voyages,omitempty" doc:"Voyages requested so far in the current cycle; voyages not yet requested are omitted entirely (omitted once finished)"`
+	PremiumHubs  []string             `json:"premiumHubs,omitempty" doc:"Origin hubs with a tighter SLA this cycle (omitted once finished)"`
+	Score        float64              `json:"score,omitempty" doc:"Current cycle's live score (omitted once finished)"`
+	Metrics      models.Metrics       `json:"metrics" doc:"Current cycle's live metrics, or the expedition-wide average once finished"`
+	Rejected     []rejectedVoyageView `json:"rejected,omitempty" doc:"Assignments from the last schedule submission that were not applied, and why"`
+	OverallScore float64              `json:"overallScore,omitempty" doc:"Average overall score across all 16 cycles; only populated once finished"`
 }
 
 func toCycleStateResponse(totalCycles int, cycle *models.Cycle, rejected []engine.RejectedAssignment) expeditionStateResponse {
@@ -179,9 +179,9 @@ type chaosProbeInput struct {
 }
 
 type chaosProbeResponse struct {
-	Attempt int    `json:"attempt"`
-	Outcome string `json:"outcome"`
-	Message string `json:"message"`
+	Attempt int    `json:"attempt" doc:"Echoes the attempt query param that was sent"`
+	Outcome string `json:"outcome" doc:"Always 'success' when this response is returned; failures come back as an HTTP error instead"`
+	Message string `json:"message" doc:"Human-readable detail about why this attempt succeeded"`
 }
 
 type chaosProbeOutput struct {
