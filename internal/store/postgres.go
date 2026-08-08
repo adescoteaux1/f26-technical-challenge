@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/adescoteaux1/generate-oracle/internal/models"
-	"github.com/adescoteaux1/generate-oracle/migrations"
+	"github.com/adescoteaux1/generate-oracle/internal/supabase"
 )
 
 // PostgresStore is the Supabase/Postgres-backed Store implementation. Full
@@ -32,7 +32,11 @@ func NewPostgresStore(ctx context.Context, connString string) (*PostgresStore, e
 	if err := pool.Ping(ctx); err != nil {
 		return nil, fmt.Errorf("ping postgres: %w", err)
 	}
-	for _, stmt := range migrations.All() {
+	stmts, err := supabase.Migrations()
+	if err != nil {
+		return nil, fmt.Errorf("load migrations: %w", err)
+	}
+	for _, stmt := range stmts {
 		if _, err := pool.Exec(ctx, stmt); err != nil {
 			return nil, fmt.Errorf("run migrations: %w", err)
 		}

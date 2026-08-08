@@ -185,7 +185,9 @@ internal/
   api/                 HTTP layer: router, auth middleware, handlers, response DTOs,
                        pages.go (landing + rendered CHALLENGE.md pages)
   storetest/           in-memory store.Store fake shared by every package's tests
-migrations/            embedded SQL schema, applied automatically on startup
+  supabase/            Supabase CLI project: migrations/*.sql (schema, timestamp-ordered)
+                       are embedded and applied automatically on startup — a new file
+                       added via `supabase migration new <name>` needs no code change
 site/                  embedded static assets for the landing/spec pages (index.html, style.css)
 ```
 
