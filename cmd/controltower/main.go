@@ -12,6 +12,7 @@ import (
 
 	"github.com/adescoteaux1/generate-control-tower/internal/api"
 	"github.com/adescoteaux1/generate-control-tower/internal/config"
+	"github.com/adescoteaux1/generate-control-tower/internal/github"
 	"github.com/adescoteaux1/generate-control-tower/internal/store"
 )
 
@@ -35,6 +36,12 @@ func main() {
 	defer db.Close()
 
 	server := &api.Server{Store: db, Log: logger}
+	if cfg.GitHubToken != "" && cfg.GitHubOrg != "" {
+		server.GitHub = github.NewClient(cfg.GitHubToken, cfg.GitHubOrg)
+	} else {
+		logger.Warn("GITHUB_TOKEN/GITHUB_ORG not set — POST /apply will report itself unavailable")
+	}
+
 	httpServer := &http.Server{
 		Addr:    ":" + cfg.Port,
 		Handler: api.NewRouter(server),

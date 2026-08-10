@@ -20,6 +20,7 @@ const userContextKey contextKey = iota
 var publicOperations = map[string]bool{
 	"register": true,
 	"login":    true,
+	"apply":    true,
 }
 
 // authMiddleware extracts a bearer token from the Authorization header,

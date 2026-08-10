@@ -66,6 +66,24 @@ a:hover { text-decoration: underline; }
   color: var(--text);
 }
 
+.callout-cta {
+  display: inline-block;
+  margin-top: 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--accent);
+  border-radius: 999px;
+  padding: 0.5rem 1.1rem;
+}
+
+.callout-cta:hover {
+  background: var(--accent-dim);
+  color: var(--text);
+  text-decoration: none;
+}
+
 .challenge-cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -195,6 +213,70 @@ a:hover { text-decoration: underline; }
   border: none;
   border-top: 1px solid var(--border);
   margin: 2.5rem 0;
+}
+
+/* --- Apply page --- */
+
+.apply-form {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin: 1.5rem 0;
+}
+
+.apply-form label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  margin-bottom: 0.4rem;
+}
+
+.apply-form input {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 0.95rem;
+  padding: 0.55rem 0.75rem;
+  min-width: 220px;
+}
+
+.apply-form input:focus {
+  outline: none;
+  border-color: var(--accent-dim);
+}
+
+.apply-form button {
+  background: var(--accent);
+  border: none;
+  border-radius: 6px;
+  color: var(--bg);
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 0.6rem 1rem;
+}
+
+.apply-form button:hover { background: var(--accent-dim); color: var(--text); }
+
+.apply-result {
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  font-size: 0.95rem;
+}
+
+.apply-result-success {
+  background: var(--panel);
+  border: 1px solid var(--accent-dim);
+  color: var(--text);
+}
+
+.apply-result-error {
+  background: var(--panel);
+  border: 1px solid #7a2f2f;
+  color: var(--text);
 }
 
 /* --- Resources section --- */

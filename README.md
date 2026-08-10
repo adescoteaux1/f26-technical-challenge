@@ -8,6 +8,36 @@ multiple independent cycles per expedition.
 It does **not** include a scheduler client — this repo is the grading
 infrastructure a scheduler is built against.
 
+## Get your challenge repo first
+
+**Applicants: do this before writing any code.** Go to `/apply` (or
+`POST /apply` with `{"githubUsername": "..."}`) and enter your GitHub
+username. **Your submission must live in the repo this creates for
+you** (`<org>/challenge-<username>`, with push access already granted) —
+don't create your own repo instead; work that ends up anywhere else isn't
+reviewed. Submitting the same username again is safe, it just hands back
+the same repo.
+
+**Whoever stands up this server:** `/apply` needs `GITHUB_TOKEN` (create
+repos + manage collaborators in the org) and `GITHUB_ORG` set — see
+`.env.example`. Without them the rest of the server still runs, but
+`/apply` returns `503` — set these *before* sharing the link with
+applicants. The token's identity needs at least "Create repository" and
+"Members: write" (or the classic `repo`+`admin:org` PAT scopes) on
+`GITHUB_ORG`.
+
+```bash
+curl -X POST localhost:8080/apply \
+  -H 'Content-Type: application/json' \
+  -d '{"githubUsername": "octocat"}'
+# {"repoUrl":"https://github.com/<org>/challenge-octocat"}
+```
+
+This endpoint intentionally has no auth and no rate limiting beyond
+GitHub-username validation and per-username idempotency — fine for sharing a
+link with a known pool of applicants, but don't post it somewhere public
+without adding a shared invite code or similar if abuse becomes a concern.
+
 ## Setup
 
 ### Dependencies
@@ -56,9 +86,9 @@ needed to run the test suite.
 
 ## Authentication
 
-Every endpoint except `/register`, `/login`, and `/healthz` requires a
-bearer token, so expeditions are tied to the applicant who created them and
-their run history can be looked up later.
+Every endpoint except `/register`, `/login`, `/apply`, and `/healthz`
+requires a bearer token, so expeditions are tied to the applicant who
+created them and their run history can be looked up later.
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -86,8 +116,9 @@ The Control Tower also serves a small static site (`site/`, plus `internal/api/p
 alongside the API — a landing page and one rendered page per challenge:
 
 - **`/`** — landing page linking to both the frontend and backend
-  challenges, with a callout that applicants only need to complete *one*
-  of the two, and that whichever they pick must end up in a GitHub repo
+  challenges, with a callout (and CTA button) that getting a repo via
+  `/apply` is required before starting either, and that applicants only
+  need to complete *one* of the two
 - **`/challenge`** — the backend (scheduler) challenge spec, rendered from
   `CHALLENGE.md`, with a "Resources" section (curated links: HTTP/APIs,
   retries/idempotency, JSON, testing) and a link to `/docs` appended
@@ -95,6 +126,8 @@ alongside the API — a landing page and one rendered page per challenge:
   spec, rendered from `FRONTEND_CHALLENGE.md`. Currently a placeholder ("spec
   hasn't been written yet") with no Resources section — add one once the
   real spec exists, same as `/challenge`
+- **`/apply`** — required first-step form to get a challenge repo (see "Get
+  your challenge repo first" above); posts to `POST /apply`
 - **`/style.css`** — shared stylesheet (embedded via `site/embed.go`)
 
 Both challenge pages share one renderer
@@ -180,6 +213,8 @@ internal/
   store/               persistence boundary: Store interface + Postgres/Supabase implementation
                        (JSONB cycle state, relational users/expeditions)
   auth/                opaque bearer token generation
+  github/              GitHub REST client backing POST /apply: create-or-reuse a repo
+                       under the org, invite the applicant as a push collaborator
   userauth/            registration/login business logic (email+NUID -> token)
   evaluation/          Expedition Engine: orchestrates generator + engine + scoring + store
                        behind the three cycle endpoints; owns profile sampling, rollover,

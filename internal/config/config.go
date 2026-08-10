@@ -13,6 +13,13 @@ import (
 type Config struct {
 	Port        string
 	DatabaseURL string
+
+	// GitHubToken/GitHubOrg configure the optional POST /apply endpoint,
+	// which creates a repo under GitHubOrg for an applicant and adds them as
+	// a collaborator. Both are unset by default; the endpoint reports itself
+	// unconfigured rather than the whole server failing to start.
+	GitHubToken string
+	GitHubOrg   string
 }
 
 // Load reads .env (if it exists) then required environment variables.
@@ -29,5 +36,10 @@ func Load() (*Config, error) {
 		port = "8080"
 	}
 
-	return &Config{Port: port, DatabaseURL: dbURL}, nil
+	return &Config{
+		Port:        port,
+		DatabaseURL: dbURL,
+		GitHubToken: os.Getenv("GITHUB_TOKEN"),
+		GitHubOrg:   os.Getenv("GITHUB_ORG"),
+	}, nil
 }

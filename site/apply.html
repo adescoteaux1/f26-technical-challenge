@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Get your challenge repo — Nexus Transit Authority</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="site-header">
+  <a href="/" class="brand">← Nexus Transit Authority</a>
+  <a href="/docs" class="docs-link">API Reference (Scalar) →</a>
+</header>
+
+<article class="markdown-body">
+  <h1>Get your challenge repo</h1>
+  <p>
+    <strong>This step is required</strong> before you start either
+    challenge. Enter your GitHub username and we'll create a private repo
+    under our org and add you as a collaborator with push access.
+    <strong>Your submission must live in this repo</strong> — don't create
+    or use your own instead. Submitting the same username again is safe;
+    you'll just get the same repo back.
+  </p>
+
+  <form id="apply-form" class="apply-form">
+    <label for="githubUsername">GitHub username</label>
+    <input id="githubUsername" name="githubUsername" type="text"
+           placeholder="octocat" autocomplete="off" required>
+    <button type="submit">Create my repo</button>
+  </form>
+
+  <p id="apply-result" class="apply-result" hidden></p>
+</article>
+
+<script>
+  const form = document.getElementById("apply-form");
+  const result = document.getElementById("apply-result");
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const username = document.getElementById("githubUsername").value.trim();
+
+    result.hidden = false;
+    result.className = "apply-result";
+    result.textContent = "Creating your repo…";
+
+    try {
+      const res = await fetch("/apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ githubUsername: username }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        result.className = "apply-result apply-result-error";
+        result.textContent = data.detail || "Something went wrong — try again.";
+        return;
+      }
+
+      result.className = "apply-result apply-result-success";
+      result.innerHTML = `Repo ready: <a href="${data.repoUrl}" target="_blank" rel="noopener">${data.repoUrl}</a>`;
+    } catch (err) {
+      result.className = "apply-result apply-result-error";
+      result.textContent = "Network error — try again.";
+    }
+  });
+</script>
+</body>
+</html>

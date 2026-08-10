@@ -5,19 +5,32 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/adescoteaux1/generate-control-tower/internal/evaluation"
+	ghub "github.com/adescoteaux1/generate-control-tower/internal/github"
 	"github.com/adescoteaux1/generate-control-tower/internal/store"
 	"github.com/adescoteaux1/generate-control-tower/internal/userauth"
 )
+
+// applicantRepoProvisioner is the subset of *github.Client that POST /apply
+// needs, so handler tests can supply a fake instead of hitting real GitHub.
+type applicantRepoProvisioner interface {
+	CreateApplicantRepo(ctx context.Context, username string) (string, error)
+}
 
 // Server holds the dependencies operation handlers need.
 type Server struct {
 	Store store.Store
 	Log   *slog.Logger
+
+	// GitHub is nil when GITHUB_TOKEN/GITHUB_ORG aren't configured, in which
+	// case POST /apply reports itself unavailable rather than the whole
+	// server failing to start over an optional feature.
+	GitHub applicantRepoProvisioner
 }
 
 func (s *Server) registerHandler(ctx context.Context, input *registerInput) (*authOutput, error) {
@@ -156,6 +169,33 @@ func (s *Server) chaosProbeHandler(ctx context.Context, input *chaosProbeInput) 
 		resp.Body = chaosProbeResponse{Attempt: input.Attempt, Outcome: "success", Message: "ok"}
 		return resp, nil
 	}
+}
+
+// applyHandler creates a private repo under the org for input.Body.GitHubUsername
+// and adds them as a push collaborator, so applicants don't need to create
+// and share their own repo — see internal/github for the actual GitHub calls.
+func (s *Server) applyHandler(ctx context.Context, input *applyInput) (*applyOutput, error) {
+	if s.GitHub == nil {
+		return nil, huma.Error503ServiceUnavailable("repo creation isn't configured on this server yet")
+	}
+
+	username := strings.TrimSpace(input.Body.GitHubUsername)
+	repoURL, err := s.GitHub.CreateApplicantRepo(ctx, username)
+	if err != nil {
+		switch {
+		case errors.Is(err, ghub.ErrInvalidUsername):
+			return nil, huma.Error422UnprocessableEntity("that doesn't look like a valid GitHub username")
+		case errors.Is(err, ghub.ErrUserNotFound):
+			return nil, huma.Error404NotFound("no GitHub user with that username exists")
+		default:
+			s.Log.Error("create applicant repo failed", "error", err, "username", username)
+			return nil, huma.Error500InternalServerError("failed to create your repo — contact the team")
+		}
+	}
+
+	resp := &applyOutput{}
+	resp.Body = applyResponse{RepoURL: repoURL}
+	return resp, nil
 }
 
 func (s *Server) lookupError(err error) error {
