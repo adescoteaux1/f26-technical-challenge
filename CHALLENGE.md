@@ -14,6 +14,19 @@ your program speaks HTTP/JSON to the Control Tower correctly.
 
 ---
 
+## 0. Get your challenge repo — do this before anything else
+
+Go to `<CONTROL_TOWER_BASE_URL>/apply` and enter your GitHub username. This
+creates a private repo for you under our org and adds you as a collaborator
+with push access.
+
+**This is the repo your submission must live in.** Don't create your own
+repo instead — work that doesn't end up in the repo created for you here
+isn't reviewed. If you lose the link, submit your username again; it's safe
+to repeat and just hands you back the same repo.
+
+---
+
 ## 1. How this gets evaluated
 
 Engineers do a lot more than write algorithms: they make judgment calls,
@@ -320,11 +333,11 @@ same reason as §1: this isn't a formula to solve for.
 ## 8. What to submit
 
 Your whole submission — code, `README.md`, `DESIGN.md`, tests, all of it —
-needs to live in a GitHub repo (public, or shared with whoever's reviewing
-it). That repo is the submission: we're evaluating your code quality, how
-you iterated and worked through the problem (largely via `DESIGN.md` and,
-where it's visible, your commit/expedition history), and your final
-scores.
+must live in the repo you got from `/apply` in §0. Don't create your own
+repo or submit from anywhere else — that repo is the submission: we're
+evaluating your code quality, how you iterated and worked through the
+problem (largely via `DESIGN.md` and, where it's visible, your
+commit/expedition history), and your final scores.
 
 1. **A working scheduler** that runs one or more full expeditions against
    the Control Tower end to end.

@@ -121,6 +121,13 @@ func stylesheetHandler(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(site.StyleCSS))
 }
 
+// applyPageHandler serves the embedded form where an applicant enters their
+// GitHub username; its own JS POSTs to /apply (see router.go/handlers.go).
+func applyPageHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write([]byte(site.ApplyHTML))
+}
+
 var challengePageHandler = markdownPage(
 	repoRootPath("CHALLENGE.md"),
 	"Nexus Transit Authority — Scheduler Challenge",

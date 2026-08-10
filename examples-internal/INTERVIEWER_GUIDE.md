@@ -9,6 +9,12 @@ scheduler submission. It assumes you've read `CHALLENGE.md` (what the
 applicant was given) but may not have touched the Control Tower's internals
 recently.
 
+**Finding a candidate's repo:** `CHALLENGE.md` §0 requires applicants to get
+their repo via `/apply` rather than create their own — it'll be under the
+org as `challenge-<their-github-username>`, not wherever they might tell
+you. If someone points you at a different repo, that's worth a question on
+its own.
+
 ---
 
 ## 1. What this is actually testing

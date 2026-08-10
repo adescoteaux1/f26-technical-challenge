@@ -12,3 +12,6 @@ var IndexHTML string
 
 //go:embed style.css
 var StyleCSS string
+
+//go:embed apply.html
+var ApplyHTML string

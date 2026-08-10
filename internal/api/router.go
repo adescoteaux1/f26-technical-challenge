@@ -26,6 +26,7 @@ func NewRouter(s *Server) http.Handler {
 	r.Get("/style.css", stylesheetHandler)
 	r.Get("/challenge", challengePageHandler)
 	r.Get("/frontend-challenge", frontendChallengePageHandler)
+	r.Get("/apply", applyPageHandler)
 
 	config := huma.DefaultConfig("Nexus Transit Authority — Control Tower", "1.0.0")
 	config.Info.Description = "Scheduling challenge Control Tower: register, start an expedition, " +
@@ -96,6 +97,18 @@ func NewRouter(s *Server) http.Handler {
 		Tags:        []string{"Expeditions"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, s.submitCycleHandler)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "apply",
+		Method:      http.MethodPost,
+		Path:        "/apply",
+		Summary:     "Get a challenge repo",
+		Description: "Give a GitHub username to get a private repo under the org with push " +
+			"access already granted, instead of creating and sharing your own repo. Safe to call " +
+			"again with the same username — it reuses the existing repo rather than erroring.",
+		Tags:          []string{"Apply"},
+		DefaultStatus: http.StatusCreated,
+	}, s.applyHandler)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "chaos-probe",

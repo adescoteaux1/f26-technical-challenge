@@ -125,6 +125,17 @@ func toFinishedResponse(row *store.ExpeditionRow) expeditionStateResponse {
 	}
 }
 
+// applyRequest / applyResponse back POST /apply: an applicant gives their
+// GitHub username and gets a private repo under the org, with push access,
+// instead of having to create and share their own.
+type applyRequest struct {
+	GitHubUsername string `json:"githubUsername" minLength:"1" doc:"Your GitHub username (not email or display name)"`
+}
+
+type applyResponse struct {
+	RepoURL string `json:"repoUrl" doc:"URL of your challenge repo; you now have push access to it"`
+}
+
 // --- Huma operation Input/Output wrappers ---
 //
 // Huma generates the OpenAPI request/response schemas (and therefore the
@@ -186,4 +197,12 @@ type chaosProbeResponse struct {
 
 type chaosProbeOutput struct {
 	Body chaosProbeResponse
+}
+
+type applyInput struct {
+	Body applyRequest
+}
+
+type applyOutput struct {
+	Body applyResponse
 }
