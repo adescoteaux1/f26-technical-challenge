@@ -15,3 +15,6 @@ var StyleCSS string
 
 //go:embed apply.html
 var ApplyHTML string
+
+//go:embed no-copy.js
+var NoCopyJS string

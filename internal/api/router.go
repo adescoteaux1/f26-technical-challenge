@@ -24,6 +24,7 @@ func NewRouter(s *Server) http.Handler {
 
 	r.Get("/", landingPageHandler)
 	r.Get("/style.css", stylesheetHandler)
+	r.Get("/no-copy.js", noCopyScriptHandler)
 	r.Get("/challenge", challengePageHandler)
 	r.Get("/frontend-challenge", frontendChallengePageHandler)
 	r.Get("/apply", applyPageHandler)

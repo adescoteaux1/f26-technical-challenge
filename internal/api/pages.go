@@ -55,6 +55,7 @@ var markdownPageTemplate = template.Must(template.New("markdown-page").Parse(`<!
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{.Title}}</title>
 <link rel="stylesheet" href="/style.css">
+<script src="/no-copy.js" defer></script>
 </head>
 <body>
 <header class="site-header">
@@ -119,6 +120,13 @@ func landingPageHandler(w http.ResponseWriter, r *http.Request) {
 func stylesheetHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/css; charset=utf-8")
 	_, _ = w.Write([]byte(site.StyleCSS))
+}
+
+// noCopyScriptHandler serves the embedded script (blocks right-click,
+// selection, and copy/cut outside form fields) shared by every page.
+func noCopyScriptHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	_, _ = w.Write([]byte(site.NoCopyJS))
 }
 
 // applyPageHandler serves the embedded form where an applicant enters their

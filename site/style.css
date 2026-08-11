@@ -20,6 +20,18 @@ html, body {
   line-height: 1.55;
 }
 
+body {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
+}
+
+input, textarea, [contenteditable] {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  user-select: text;
+}
+
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
