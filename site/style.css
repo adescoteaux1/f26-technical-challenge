@@ -201,6 +201,17 @@ a:hover { text-decoration: underline; }
 }
 .markdown-body pre code { background: none; border: none; padding: 0; }
 
+/* Design exports embedded in the challenge specs. Width is capped by the
+   container, and never upscaled past the export's own resolution. */
+.markdown-body img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1.5rem 0;
+  border: 1px solid var(--border, #2a3140);
+  border-radius: 8px;
+}
+
 .markdown-body table {
   width: 100%;
   border-collapse: collapse;

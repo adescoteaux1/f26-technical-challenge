@@ -282,7 +282,7 @@ func TestChallengePage_RendersMarkdownWithTablesAndResources(t *testing.T) {
 	}
 }
 
-func TestFrontendChallengePage_RendersPlaceholderWithoutResourcesSection(t *testing.T) {
+func TestFrontendChallengePage_RendersSpecWithTablesAndResources(t *testing.T) {
 	srv := newTestServer()
 	defer srv.Close()
 
@@ -297,11 +297,28 @@ func TestFrontendChallengePage_RendersPlaceholderWithoutResourcesSection(t *test
 
 	body, _ := io.ReadAll(resp.Body)
 	html := string(body)
-	if !strings.Contains(html, "placeholder") {
-		t.Error("expected FRONTEND_CHALLENGE.md's placeholder text to render")
+
+	// The outcome table is the spec's load-bearing bit of formatting; plain
+	// CommonMark would render it as text.
+	if !strings.Contains(html, "<table>") {
+		t.Error("expected the booking outcome table to render as <table>")
 	}
-	if strings.Contains(html, "<h2>Resources</h2>") {
-		t.Error("expected no Resources section while there's no curated list for this page yet")
+	if !strings.Contains(html, "<h2>Resources</h2>") {
+		t.Error("expected a Resources section")
+	}
+	if !strings.Contains(html, "tailwindcss.com") {
+		t.Error("expected the frontend resource list, not the backend one")
+	}
+	if !strings.Contains(html, `href="/docs"`) {
+		t.Error("expected a link to the Scalar API reference at /docs")
+	}
+	for _, endpoint := range []string{"/frontend/portals", "/frontend/bookings", "/frontend/slots"} {
+		if !strings.Contains(html, endpoint) {
+			t.Errorf("expected the spec to document %s", endpoint)
+		}
+	}
+	if strings.Contains(html, "spec hasn&#39;t been written yet") {
+		t.Error("placeholder text is still present")
 	}
 }
 
@@ -544,6 +561,247 @@ func TestBookings_ItemsAreOrderedAndInternallyConsistent(t *testing.T) {
 		default:
 			t.Errorf("%s: unexpected status %q", b.Reference, b.Status)
 		}
+	}
+}
+
+func getSlots(t *testing.T, baseURL string) []transitSlotItem {
+	t.Helper()
+
+	resp, err := http.Get(baseURL + "/frontend/slots")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 from /frontend/slots, got %d", resp.StatusCode)
+	}
+
+	var available []transitSlotItem
+	if err := json.NewDecoder(resp.Body).Decode(&available); err != nil {
+		t.Fatalf("decode slots: %v", err)
+	}
+	return available
+}
+
+func TestTransitSlots_ReturnsBookableInventory(t *testing.T) {
+	srv := newTestServer()
+	defer srv.Close()
+
+	available := getSlots(t, srv.URL)
+	if len(available) == 0 {
+		t.Fatal("expected at least one bookable slot")
+	}
+
+	seen := map[string]bool{}
+	for _, slot := range available {
+		if slot.ID == "" || slot.Destination == "" || slot.Portal == "" {
+			t.Errorf("incomplete slot: %+v", slot)
+		}
+		if slot.SeatsAvailable < 1 || slot.FareCredits < 1 || slot.DurationMinutes < 1 {
+			t.Errorf("%s has unusable inventory: %+v", slot.ID, slot)
+		}
+		if seen[slot.ID] {
+			t.Errorf("duplicate slot ID %s", slot.ID)
+		}
+		seen[slot.ID] = true
+	}
+}
+
+func TestSubmitBooking_UnknownSlotIsNotFound(t *testing.T) {
+	srv := newTestServer()
+	defer srv.Close()
+
+	resp, _ := doJSON(t, http.MethodPost, srv.URL+"/frontend/slots/SLOT-9999/book", "",
+		map[string]any{"travelerCount": 1})
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404 for an unknown slot, got %d", resp.StatusCode)
+	}
+}
+
+func TestSubmitBooking_OversizedPartyIsAnOutcomeNotAnError(t *testing.T) {
+	srv := newTestServer()
+	defer srv.Close()
+
+	slot := getSlots(t, srv.URL)[0]
+	resp, body := doJSON(t, http.MethodPost, srv.URL+"/frontend/slots/"+slot.ID+"/book", "",
+		map[string]any{"travelerCount": slot.SeatsAvailable + 1})
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 with an outcome, got %d (%v)", resp.StatusCode, body)
+	}
+	if body["status"] != "insufficient_seats" {
+		t.Errorf("expected status insufficient_seats, got %v", body["status"])
+	}
+	if body["retryable"] != false {
+		t.Error("an oversized party is not fixed by retrying the same request")
+	}
+	if body["reference"] != nil {
+		t.Errorf("a rejected submission must not carry a reference, got %v", body["reference"])
+	}
+}
+
+// The whole point of the endpoint is that it is unreliable, so assert both
+// outcomes show up rather than asserting any single response.
+func TestSubmitBooking_ProducesBothSuccessAndFailure(t *testing.T) {
+	srv := newTestServer()
+	defer srv.Close()
+
+	slot := getSlots(t, srv.URL)[0]
+	body := map[string]any{
+		"travelerName":  "Ada Lovelace",
+		"travelerCount": 1,
+		"contactEmail":  "ada@example.com",
+		"notes":         "window seat if the corridor allows",
+		"metadata":      map[string]string{"source": "console", "tier": "premium"},
+	}
+
+	seen := map[string]int{}
+	for range 200 {
+		resp, parsed := doJSON(t, http.MethodPost, srv.URL+"/frontend/slots/"+slot.ID+"/book", "", body)
+		status, _ := parsed["status"].(string)
+		seen[status]++
+
+		// HTTP must agree with the body: only a corridor failure is a 503.
+		wantHTTP := http.StatusOK
+		if status == "corridor_unstable" {
+			wantHTTP = http.StatusServiceUnavailable
+		}
+		if resp.StatusCode != wantHTTP {
+			t.Fatalf("outcome %q returned HTTP %d, want %d (%v)", status, resp.StatusCode, wantHTTP, parsed)
+		}
+
+		if parsed["detail"] == "" || parsed["detail"] == nil {
+			t.Fatalf("%s outcome carries no detail: %v", status, parsed)
+		}
+		if parsed["slotId"] != slot.ID {
+			t.Fatalf("outcome echoed slot %v, want %s", parsed["slotId"], slot.ID)
+		}
+
+		switch status {
+		case "confirmed":
+			if parsed["reference"] == "" || parsed["reference"] == nil {
+				t.Fatalf("confirmed booking has no reference: %v", parsed)
+			}
+			if parsed["confirmedAt"] == nil {
+				t.Fatalf("confirmed booking has no confirmedAt: %v", parsed)
+			}
+			if total, _ := parsed["totalCredits"].(float64); int(total) != slot.FareCredits {
+				t.Fatalf("totalCredits %v does not match fare %d for 1 traveler", parsed["totalCredits"], slot.FareCredits)
+			}
+			if parsed["retryable"] != false {
+				t.Error("a confirmed booking must not be flagged retryable")
+			}
+		case "corridor_unstable":
+			if parsed["retryable"] != true {
+				t.Error("a corridor failure is the one outcome worth retrying unchanged")
+			}
+			if parsed["reference"] != nil {
+				t.Errorf("failed submission carried a reference: %v", parsed)
+			}
+		case "slot_taken":
+			if parsed["retryable"] != false {
+				t.Error("retrying the same slot cannot fix it being taken")
+			}
+			if parsed["reference"] != nil {
+				t.Errorf("failed submission carried a reference: %v", parsed)
+			}
+		default:
+			t.Fatalf("unexpected status %q from a valid submission", status)
+		}
+	}
+
+	if seen["confirmed"] == 0 {
+		t.Error("200 submissions never succeeded")
+	}
+	if seen["slot_taken"]+seen["corridor_unstable"] == 0 {
+		t.Errorf("200 submissions never failed; saw %v", seen)
+	}
+}
+
+func TestSubmitBooking_ChargesPerTraveler(t *testing.T) {
+	srv := newTestServer()
+	defer srv.Close()
+
+	var roomy transitSlotItem
+	for _, slot := range getSlots(t, srv.URL) {
+		if slot.SeatsAvailable >= 3 {
+			roomy = slot
+			break
+		}
+	}
+	if roomy.ID == "" {
+		t.Skip("no slot with 3+ seats in the catalogue")
+	}
+
+	// Retry past the simulated failures to reach a confirmation.
+	for range 200 {
+		_, parsed := doJSON(t, http.MethodPost, srv.URL+"/frontend/slots/"+roomy.ID+"/book", "",
+			map[string]any{"travelerCount": 3})
+		if parsed["status"] != "confirmed" {
+			continue
+		}
+		if total, _ := parsed["totalCredits"].(float64); int(total) != roomy.FareCredits*3 {
+			t.Fatalf("totalCredits %v, want %d for 3 travelers", parsed["totalCredits"], roomy.FareCredits*3)
+		}
+		return
+	}
+	t.Error("never got a confirmation across 200 attempts")
+}
+
+// The spec's images are markdown links resolved against /site/assets/. If the
+// route or the embed pattern breaks, the page still renders 200 with broken
+// images, so assert both halves: the files serve, and the page points at them.
+func TestDesignAssets_ServeAndAreReferencedBySpec(t *testing.T) {
+	srv := newTestServer()
+	defer srv.Close()
+
+	assets := []string{"dashboard.png", "portal-network-status.png", "upcoming-transits.png"}
+	for _, name := range assets {
+		resp, err := http.Get(srv.URL + "/site/assets/" + name)
+		if err != nil {
+			t.Fatalf("%s: request failed: %v", name, err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("%s: expected 200, got %d", name, resp.StatusCode)
+			continue
+		}
+		if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "image/png") {
+			t.Errorf("%s: expected image/png, got %q", name, ct)
+		}
+		if !strings.HasPrefix(string(body), "\x89PNG") {
+			t.Errorf("%s: body is not a PNG", name)
+		}
+	}
+
+	resp, err := http.Get(srv.URL + "/frontend-challenge")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	html, _ := io.ReadAll(resp.Body)
+
+	for _, name := range assets {
+		if !strings.Contains(string(html), `src="site/assets/`+name+`"`) {
+			t.Errorf("spec page has no <img> for %s; markdown image syntax may have been "+
+				"replaced with raw HTML, which goldmark drops", name)
+		}
+	}
+}
+
+func TestDesignAssets_RejectPathTraversal(t *testing.T) {
+	srv := newTestServer()
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/site/assets/../../go.mod")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusOK {
+		t.Error("served a file outside the embedded assets directory")
 	}
 }
 

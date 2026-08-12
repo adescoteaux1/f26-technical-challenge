@@ -12,6 +12,7 @@ import (
 	"github.com/adescoteaux1/generate-control-tower/internal/engine"
 	"github.com/adescoteaux1/generate-control-tower/internal/models"
 	"github.com/adescoteaux1/generate-control-tower/internal/portals"
+	"github.com/adescoteaux1/generate-control-tower/internal/slots"
 	"github.com/adescoteaux1/generate-control-tower/internal/store"
 )
 
@@ -143,8 +144,8 @@ type applyResponse struct {
 // portalStatusItem is one row of the console's Portal Network Status panel.
 type portalStatusItem struct {
 	Name   string `json:"name" doc:"Portal display name"`
-	Status string `json:"status" enum:"nominal,unstable,offline" doc:"offline when the containment field is down, unstable at 80 load or above, nominal otherwise"`
-	Load   int    `json:"load" minimum:"0" maximum:"100" doc:"Current load percentage; always 0 while offline, but an online portal with no traffic is also 0"`
+	Status string `json:"status" enum:"nominal,unstable,offline" doc:"offline when the portal's containment field is down, unstable at 80 load or above, nominal otherwise"`
+	Load   int    `json:"load" minimum:"0" maximum:"100" doc:"Current load percentage. Always 0 when offline, but a nominal portal with nothing going through it also reports 0"`
 }
 
 func toPortalStatusItem(p portals.Portal) portalStatusItem {
@@ -176,6 +177,56 @@ func toBookingItem(b models.Booking) bookingItem {
 		Status:       string(b.Status),
 		StatusDetail: b.StatusDetail,
 	}
+}
+
+// transitSlotItem is one bookable departure. The fields are intentionally
+// plain facts about a slot, not a prescribed layout — how a console groups,
+// filters or sequences them is the challenge.
+type transitSlotItem struct {
+	ID              string    `json:"id" doc:"Slot ID, submit this to book it"`
+	Destination     string    `json:"destination" doc:"Destination designation, e.g. Alpha-7"`
+	Portal          string    `json:"portal" doc:"Origin portal this departure leaves from"`
+	DepartsAt       time.Time `json:"departsAt" doc:"Scheduled departure time"`
+	DurationMinutes int       `json:"durationMinutes" doc:"Transit duration in minutes"`
+	SeatsAvailable  int       `json:"seatsAvailable" doc:"Seats still open on this departure"`
+	FareCredits     int       `json:"fareCredits" doc:"Fare per traveler, in credits"`
+}
+
+func toTransitSlotItem(s slots.Slot) transitSlotItem {
+	return transitSlotItem{
+		ID:              s.ID,
+		Destination:     s.Destination,
+		Portal:          s.Portal,
+		DepartsAt:       s.DepartsAt,
+		DurationMinutes: s.DurationMinutes,
+		SeatsAvailable:  s.SeatsAvailable,
+		FareCredits:     s.FareCredits,
+	}
+}
+
+// submitBookingRequest carries whatever a console collected. Only the traveler
+// count is structurally required; Metadata is a free-form bag so a form can
+// gather extra fields without this endpoint dictating what they are.
+type submitBookingRequest struct {
+	TravelerName  string            `json:"travelerName,omitempty" maxLength:"120" doc:"Lead traveler's name"`
+	TravelerCount int               `json:"travelerCount" minimum:"1" default:"1" doc:"Seats to reserve"`
+	ContactEmail  string            `json:"contactEmail,omitempty" doc:"Where to send the confirmation"`
+	Notes         string            `json:"notes,omitempty" maxLength:"500" doc:"Free-text requests"`
+	Metadata      map[string]string `json:"metadata,omitempty" doc:"Any additional key/value pairs your booking form collects"`
+}
+
+// submitBookingResponse reports the outcome as data, not as an HTTP error: a
+// slot being taken is an answer, not a broken request. The booking fields are
+// populated only when status is confirmed.
+type submitBookingResponse struct {
+	Status        string     `json:"status" enum:"confirmed,slot_taken,corridor_unstable,insufficient_seats" doc:"Outcome of this submission"`
+	SlotID        string     `json:"slotId" doc:"Slot this submission targeted"`
+	Detail        string     `json:"detail" doc:"Human-readable explanation, safe to show a traveler"`
+	Retryable     bool       `json:"retryable" doc:"True when resubmitting the identical request could succeed"`
+	Reference     string     `json:"reference,omitempty" doc:"Confirmation reference; only when confirmed"`
+	TravelerCount int        `json:"travelerCount,omitempty" doc:"Seats reserved; only when confirmed"`
+	TotalCredits  int        `json:"totalCredits,omitempty" doc:"Fare per traveler times traveler count; only when confirmed"`
+	ConfirmedAt   *time.Time `json:"confirmedAt,omitempty" doc:"When the booking was confirmed; null otherwise"`
 }
 
 type bookingsPage struct {
@@ -297,4 +348,24 @@ type bookingsInput struct {
 
 type bookingsOutput struct {
 	Body bookingsPage
+}
+
+type transitSlotsInput struct{}
+
+type transitSlotsOutput struct {
+	Body []transitSlotItem
+}
+
+type submitBookingInput struct {
+	SlotID string `path:"slotId" doc:"Slot ID from GET /frontend/slots"`
+	Body   submitBookingRequest
+}
+
+// Status lets one handler answer with different codes: outcomes that are real
+// answers come back 200, while a corridor failure reports 503 because the
+// operation genuinely did not complete. The body is identical either way, so a
+// client can still branch on Body.Status alone.
+type submitBookingOutput struct {
+	Status int
+	Body   submitBookingResponse
 }

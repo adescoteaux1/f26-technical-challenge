@@ -11,7 +11,7 @@ func hourOffset(h int) time.Time {
 	return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC).Add(time.Duration(h) * time.Hour)
 }
 
-func TestStatusFor_DerivesFromOnlineAndLoad(t *testing.T) {
+func TestStatusFor_DerivesFromContainmentAndLoad(t *testing.T) {
 	cases := []struct {
 		online bool
 		load   int
@@ -27,8 +27,8 @@ func TestStatusFor_DerivesFromOnlineAndLoad(t *testing.T) {
 		{true, 100, StatusUnstable},
 	}
 	for _, tc := range cases {
-		if got := StatusFor(tc.online, tc.load); got != tc.want {
-			t.Errorf("StatusFor(%t, %d) = %q, want %q", tc.online, tc.load, got, tc.want)
+		if got := statusFor(tc.online, tc.load); got != tc.want {
+			t.Errorf("statusFor(%t, %d) = %q, want %q", tc.online, tc.load, got, tc.want)
 		}
 	}
 }
@@ -76,12 +76,21 @@ func TestSnapshot_LoadInRangeAndStatusConsistent(t *testing.T) {
 			if p.Load < 0 || p.Load > 100 {
 				t.Fatalf("hour +%d: %s load %d out of range", hour, p.Name, p.Load)
 			}
-			if !p.Online && p.Load != 0 {
-				t.Fatalf("hour +%d: %s is offline but reports load %d", hour, p.Name, p.Load)
-			}
-			if want := StatusFor(p.Online, p.Load); p.Status != want {
-				t.Fatalf("hour +%d: %s status %q does not match online=%t load=%d (want %q)",
-					hour, p.Name, p.Status, p.Online, p.Load, want)
+			switch p.Status {
+			case StatusOffline:
+				if p.Load != 0 {
+					t.Fatalf("hour +%d: %s is offline but reports load %d", hour, p.Name, p.Load)
+				}
+			case StatusUnstable:
+				if p.Load < UnstableLoadThreshold {
+					t.Fatalf("hour +%d: %s is unstable at load %d, below the threshold", hour, p.Name, p.Load)
+				}
+			case StatusNominal:
+				if p.Load >= UnstableLoadThreshold {
+					t.Fatalf("hour +%d: %s is nominal at load %d, at or above the threshold", hour, p.Name, p.Load)
+				}
+			default:
+				t.Fatalf("hour +%d: %s has unexpected status %q", hour, p.Name, p.Status)
 			}
 		}
 	}
@@ -122,19 +131,15 @@ func TestSnapshot_OfflinePortalVariesAcrossHours(t *testing.T) {
 	}
 }
 
-// The point of tracking Online separately: a healthy portal with no traffic
-// must read as nominal at 0 load, not as offline.
-func TestSnapshot_ProducesIdleOnlinePortal(t *testing.T) {
+// The reason containment and load stay separate during generation: a healthy
+// portal with no traffic has to read as nominal at 0 load, not as offline.
+func TestSnapshot_ProducesNominalPortalAtZeroLoad(t *testing.T) {
 	for hour := range 500 {
 		for _, p := range snapshotAt(hourOffset(hour)) {
-			if p.Online && p.Load == 0 {
-				if p.Status != StatusNominal {
-					t.Fatalf("hour +%d: idle online portal %s reported %q, want %q",
-						hour, p.Name, p.Status, StatusNominal)
-				}
+			if p.Status == StatusNominal && p.Load == 0 {
 				return
 			}
 		}
 	}
-	t.Error("no snapshot across 500 hours produced an online portal at 0 load")
+	t.Error("no snapshot across 500 hours produced a nominal portal at 0 load")
 }

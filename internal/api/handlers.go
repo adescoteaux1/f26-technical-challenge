@@ -5,14 +5,18 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/adescoteaux1/generate-control-tower/internal/evaluation"
+	"github.com/google/uuid"
+
 	ghub "github.com/adescoteaux1/generate-control-tower/internal/github"
 	"github.com/adescoteaux1/generate-control-tower/internal/portals"
+	"github.com/adescoteaux1/generate-control-tower/internal/slots"
 	"github.com/adescoteaux1/generate-control-tower/internal/store"
 	"github.com/adescoteaux1/generate-control-tower/internal/userauth"
 )
@@ -248,6 +252,59 @@ func (s *Server) bookingsHandler(ctx context.Context, input *bookingsInput) (*bo
 	resp := &bookingsOutput{}
 	resp.Body = page
 	return resp, nil
+}
+
+func (s *Server) transitSlotsHandler(_ context.Context, _ *transitSlotsInput) (*transitSlotsOutput, error) {
+	available := slots.Available()
+
+	resp := &transitSlotsOutput{Body: make([]transitSlotItem, 0, len(available))}
+	for _, slot := range available {
+		resp.Body = append(resp.Body, toTransitSlotItem(slot))
+	}
+	return resp, nil
+}
+
+func (s *Server) submitBookingHandler(_ context.Context, input *submitBookingInput) (*submitBookingOutput, error) {
+	slot, found := slots.Find(input.SlotID)
+	if !found {
+		return nil, huma.Error404NotFound("no such slot — re-read GET /frontend/slots")
+	}
+
+	outcome := slots.OutcomeInsufficientSeats
+	if input.Body.TravelerCount <= slot.SeatsAvailable {
+		outcome = slots.SimulateOutcome()
+	}
+
+	resp := &submitBookingOutput{Status: statusForOutcome(outcome)}
+	resp.Body = submitBookingResponse{
+		Status:    string(outcome),
+		SlotID:    slot.ID,
+		Detail:    outcome.Detail(),
+		Retryable: outcome.Retryable(),
+	}
+	if outcome == slots.OutcomeConfirmed {
+		confirmedAt := time.Now().UTC()
+		resp.Body.Reference = newBookingReference()
+		resp.Body.TravelerCount = input.Body.TravelerCount
+		resp.Body.TotalCredits = slot.FareCredits * input.Body.TravelerCount
+		resp.Body.ConfirmedAt = &confirmedAt
+	}
+	return resp, nil
+}
+
+// statusForOutcome keeps HTTP honest: a slot being taken is an answer to a
+// well-formed request, but a corridor failure means the booking never
+// completed, and reporting that as 200 would hide it from every client,
+// proxy and dashboard above the JSON body.
+func statusForOutcome(outcome slots.Outcome) int {
+	if outcome == slots.OutcomeCorridorUnstable {
+		return http.StatusServiceUnavailable
+	}
+	return http.StatusOK
+}
+
+func newBookingReference() string {
+	return "BK-" + strings.ToUpper(uuid.NewString()[:6])
 }
 
 func (s *Server) lookupError(err error) error {
