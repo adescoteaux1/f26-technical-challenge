@@ -305,19 +305,6 @@ func TestFrontendChallengePage_RendersPlaceholderWithoutResourcesSection(t *test
 	}
 }
 
-func TestFrontendHello_ReturnsMessageWithoutAuth(t *testing.T) {
-	srv := newTestServer()
-	defer srv.Close()
-
-	resp, body := doJSON(t, http.MethodGet, srv.URL+"/frontend/hello", "", nil)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200 without a token, got %d (%v)", resp.StatusCode, body)
-	}
-	if msg, _ := body["message"].(string); msg != "hello" {
-		t.Errorf("expected message %q, got %v", "hello", body["message"])
-	}
-}
-
 func TestPortalNetworkStatus_ReturnsSixPortalsWithDerivedStatus(t *testing.T) {
 	srv := newTestServer()
 	defer srv.Close()

@@ -21,7 +21,6 @@ var publicOperations = map[string]bool{
 	"register":              true,
 	"login":                 true,
 	"apply":                 true,
-	"frontend-hello":        true,
 	"portal-network-status": true,
 	"list-bookings":         true,
 }

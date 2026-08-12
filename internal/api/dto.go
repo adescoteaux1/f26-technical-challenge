@@ -140,11 +140,6 @@ type applyResponse struct {
 	RepoURL string `json:"repoUrl" doc:"URL of your challenge repo; you now have push access to it"`
 }
 
-// frontendHelloResponse is a placeholder payload for the operations console.
-type frontendHelloResponse struct {
-	Message string `json:"message" doc:"Placeholder greeting"`
-}
-
 // portalStatusItem is one row of the console's Portal Network Status panel.
 type portalStatusItem struct {
 	Name   string `json:"name" doc:"Portal display name"`
@@ -285,12 +280,6 @@ type applyInput struct {
 
 type applyOutput struct {
 	Body applyResponse
-}
-
-type frontendHelloInput struct{}
-
-type frontendHelloOutput struct {
-	Body frontendHelloResponse
 }
 
 type portalStatusInput struct{}

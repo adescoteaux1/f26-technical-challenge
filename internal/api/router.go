@@ -124,14 +124,6 @@ func NewRouter(s *Server) http.Handler {
 	}, s.chaosProbeHandler)
 
 	huma.Register(api, huma.Operation{
-		OperationID: "frontend-hello",
-		Method:      http.MethodGet,
-		Path:        "/frontend/hello",
-		Summary:     "Placeholder data endpoint for the operations console",
-		Tags:        []string{"Frontend"},
-	}, s.frontendHelloHandler)
-
-	huma.Register(api, huma.Operation{
 		OperationID: "portal-network-status",
 		Method:      http.MethodGet,
 		Path:        "/frontend/portals",

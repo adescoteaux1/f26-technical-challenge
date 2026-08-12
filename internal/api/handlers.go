@@ -199,12 +199,6 @@ func (s *Server) applyHandler(ctx context.Context, input *applyInput) (*applyOut
 	return resp, nil
 }
 
-func (s *Server) frontendHelloHandler(_ context.Context, _ *frontendHelloInput) (*frontendHelloOutput, error) {
-	resp := &frontendHelloOutput{}
-	resp.Body = frontendHelloResponse{Message: "hello"}
-	return resp, nil
-}
-
 func (s *Server) portalStatusHandler(_ context.Context, _ *portalStatusInput) (*portalStatusOutput, error) {
 	snapshot := portals.Snapshot()
 
