@@ -13,7 +13,7 @@ infrastructure a scheduler is built against.
 **Applicants: do this before writing any code.** Go to `/apply` (or
 `POST /apply` with `{"githubUsername": "..."}`) and enter your GitHub
 username. **Your submission must live in the repo this creates for
-you** (`<org>/challenge-<username>`, with push access already granted) —
+you** (`<org>/f26-challenge-<username>`, with push access already granted) —
 don't create your own repo instead; work that ends up anywhere else isn't
 reviewed. Submitting the same username again is safe, it just hands back
 the same repo.
@@ -30,7 +30,7 @@ applicants. The token's identity needs at least "Create repository" and
 curl -X POST localhost:8080/apply \
   -H 'Content-Type: application/json' \
   -d '{"githubUsername": "octocat"}'
-# {"repoUrl":"https://github.com/<org>/challenge-octocat"}
+# {"repoUrl":"https://github.com/<org>/f26-challenge-octocat"}
 ```
 
 This endpoint intentionally has no auth and no rate limiting beyond

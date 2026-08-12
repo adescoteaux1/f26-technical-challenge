@@ -45,17 +45,17 @@ func TestCreateApplicantRepo_NewRepo(t *testing.T) {
 		case r.Method == http.MethodPost && r.URL.Path == "/orgs/the-org/repos":
 			var body map[string]any
 			_ = json.NewDecoder(r.Body).Decode(&body)
-			if body["name"] != "challenge-octocat" {
-				t.Errorf("repo name = %v, want challenge-octocat", body["name"])
+			if body["name"] != "f26-challenge-octocat" {
+				t.Errorf("repo name = %v, want f26-challenge-octocat", body["name"])
 			}
 			if body["private"] != true {
 				t.Errorf("private = %v, want true", body["private"])
 			}
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(map[string]string{
-				"html_url": "https://github.com/the-org/challenge-octocat",
+				"html_url": "https://github.com/the-org/f26-challenge-octocat",
 			})
-		case r.Method == http.MethodPut && r.URL.Path == "/repos/the-org/challenge-octocat/collaborators/octocat":
+		case r.Method == http.MethodPut && r.URL.Path == "/repos/the-org/f26-challenge-octocat/collaborators/octocat":
 			w.WriteHeader(http.StatusCreated)
 		default:
 			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
@@ -66,7 +66,7 @@ func TestCreateApplicantRepo_NewRepo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateApplicantRepo() error = %v", err)
 	}
-	if repoURL != "https://github.com/the-org/challenge-octocat" {
+	if repoURL != "https://github.com/the-org/f26-challenge-octocat" {
 		t.Errorf("repoURL = %q", repoURL)
 	}
 }
@@ -76,10 +76,10 @@ func TestCreateApplicantRepo_ReusesExistingRepo(t *testing.T) {
 		switch {
 		case r.Method == http.MethodPost && r.URL.Path == "/orgs/the-org/repos":
 			w.WriteHeader(http.StatusUnprocessableEntity)
-		case r.Method == http.MethodGet && r.URL.Path == "/repos/the-org/challenge-octocat":
+		case r.Method == http.MethodGet && r.URL.Path == "/repos/the-org/f26-challenge-octocat":
 			w.WriteHeader(http.StatusOK)
 			_ = json.NewEncoder(w).Encode(map[string]string{
-				"html_url": "https://github.com/the-org/challenge-octocat",
+				"html_url": "https://github.com/the-org/f26-challenge-octocat",
 			})
 		case r.Method == http.MethodPut:
 			w.WriteHeader(http.StatusNoContent)
@@ -92,7 +92,7 @@ func TestCreateApplicantRepo_ReusesExistingRepo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateApplicantRepo() error = %v", err)
 	}
-	if repoURL != "https://github.com/the-org/challenge-octocat" {
+	if repoURL != "https://github.com/the-org/f26-challenge-octocat" {
 		t.Errorf("repoURL = %q", repoURL)
 	}
 }
@@ -103,7 +103,7 @@ func TestCreateApplicantRepo_UnknownGitHubUser(t *testing.T) {
 		case http.MethodPost:
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(map[string]string{
-				"html_url": "https://github.com/the-org/challenge-ghost",
+				"html_url": "https://github.com/the-org/f26-challenge-ghost",
 			})
 		case http.MethodPut:
 			w.WriteHeader(http.StatusNotFound)

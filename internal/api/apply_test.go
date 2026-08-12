@@ -31,7 +31,7 @@ func newTestServerWithGitHub(gh applicantRepoProvisioner) *httptest.Server {
 }
 
 func TestApply_Success(t *testing.T) {
-	fake := &fakeProvisioner{repoURL: "https://github.com/the-org/challenge-octocat"}
+	fake := &fakeProvisioner{repoURL: "https://github.com/the-org/f26-challenge-octocat"}
 	srv := newTestServerWithGitHub(fake)
 	defer srv.Close()
 
@@ -88,7 +88,7 @@ func TestApply_NotConfigured(t *testing.T) {
 }
 
 func TestApply_NoAuthRequired(t *testing.T) {
-	fake := &fakeProvisioner{repoURL: "https://github.com/the-org/challenge-octocat"}
+	fake := &fakeProvisioner{repoURL: "https://github.com/the-org/f26-challenge-octocat"}
 	srv := newTestServerWithGitHub(fake)
 	defer srv.Close()
 
