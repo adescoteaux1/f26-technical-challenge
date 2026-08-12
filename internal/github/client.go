@@ -52,7 +52,7 @@ func (c *Client) CreateApplicantRepo(ctx context.Context, username string) (stri
 		return "", ErrInvalidUsername
 	}
 
-	repoName := "challenge-" + username
+	repoName := "f26-challenge-" + username
 	repoURL, err := c.createOrGetRepo(ctx, repoName)
 	if err != nil {
 		return "", err

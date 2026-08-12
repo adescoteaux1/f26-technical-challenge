@@ -96,6 +96,22 @@ a:hover { text-decoration: underline; }
   text-decoration: none;
 }
 
+.callout-note {
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.callout-note p { margin: 0 0 0.4rem; }
+
+.callout-note ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.callout-note li { padding: 0.15rem 0; }
+
 .challenge-cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
