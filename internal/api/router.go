@@ -123,5 +123,27 @@ func NewRouter(s *Server) http.Handler {
 		Security: []map[string][]string{{"bearer": {}}},
 	}, s.chaosProbeHandler)
 
+	huma.Register(api, huma.Operation{
+		OperationID: "portal-network-status",
+		Method:      http.MethodGet,
+		Path:        "/frontend/portals",
+		Summary:     "Portal Network Status for the operations console",
+		Description: "Returns all six portals with a randomized load; status is derived from it, " +
+			"not sent independently. The network state is stable for the whole clock hour, so " +
+			"polling more often than that returns the same values.",
+		Tags: []string{"Frontend"},
+	}, s.portalStatusHandler)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "list-bookings",
+		Method:      http.MethodGet,
+		Path:        "/frontend/bookings",
+		Summary:     "Paginated transit bookings for the operations console",
+		Description: "Cursor-paginated for infinite scroll: feed nextCursor back as ?cursor= to " +
+			"append the next batch. There are far more bookings on file than one request can " +
+			"return — limit is capped at 10, so the console has to page through them.",
+		Tags: []string{"Frontend"},
+	}, s.bookingsHandler)
+
 	return r
 }

@@ -14,7 +14,9 @@ package storetest
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
+	"time"
 
 	"github.com/adescoteaux1/generate-control-tower/internal/models"
 	"github.com/adescoteaux1/generate-control-tower/internal/store"
@@ -26,6 +28,7 @@ type FakeStore struct {
 	expeditions map[string]*store.ExpeditionRow
 	cycles      map[string]map[int][]byte // JSON-encoded models.Cycle
 	users       map[string]models.User    // keyed by user ID
+	bookings    []models.Booking          // pre-seeded, ordered by departure
 
 	// expeditionLocksMu guards expeditionLocks itself, kept separate from mu
 	// (which guards the data above) so WithExpeditionLock can hold a
@@ -40,7 +43,47 @@ func New() *FakeStore {
 		expeditions: map[string]*store.ExpeditionRow{},
 		cycles:      map[string]map[int][]byte{},
 		users:       map[string]models.User{},
+		bookings:    seedBookings(),
 	}
+}
+
+// bookingSeedCount mirrors the row count in the bookings migration so
+// pagination tests exercise the same multi-page shape as a real database.
+const (
+	bookingSeedCount        = 46
+	firstBookingReferenceNo = 4417
+)
+
+func seedBookings() []models.Booking {
+	statusCycle := []models.BookingStatus{
+		models.BookingCleared, models.BookingCleared, models.BookingQueued,
+		models.BookingCleared, models.BookingHeld, models.BookingCanceled,
+	}
+	firstDeparture := time.Date(2026, 8, 12, 7, 15, 0, 0, time.UTC)
+
+	seeded := make([]models.Booking, 0, bookingSeedCount)
+	for i := range bookingSeedCount {
+		booking := models.Booking{
+			Reference:   fmt.Sprintf("BK-%d", firstBookingReferenceNo+i),
+			DepartsAt:   firstDeparture.AddDate(0, 0, i*2),
+			Destination: fmt.Sprintf("Dest-%d", i%10),
+			Portal:      fmt.Sprintf("Portal %d", i%8),
+			Status:      statusCycle[i%len(statusCycle)],
+		}
+		switch booking.Status {
+		case models.BookingHeld:
+			booking.StatusDetail = "Corridor Offline"
+		case models.BookingQueued:
+			load := 80 + i%20
+			booking.LoadPercent = &load
+			booking.StatusDetail = "Corridor Unstable"
+		default:
+			load := 31 + i%48
+			booking.LoadPercent = &load
+		}
+		seeded = append(seeded, booking)
+	}
+	return seeded
 }
 
 func (f *FakeStore) CreateExpedition(ctx context.Context, exp *models.Expedition) error {
@@ -145,6 +188,42 @@ func (f *FakeStore) ListExpeditionsForUser(ctx context.Context, userID string) (
 		out = append(out, store.ExpeditionSummary{ID: row.ID, Finished: row.Finished, OverallScore: row.OverallScore, Metrics: row.Metrics})
 	}
 	return out, nil
+}
+
+func (f *FakeStore) ListBookings(ctx context.Context, cursor *store.BookingCursor, limit int) ([]models.Booking, int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	totalOnFile := len(f.bookings)
+
+	first := f.firstIndexAfterLocked(cursor)
+	last := min(first+limit, totalOnFile)
+
+	page := make([]models.Booking, 0, last-first)
+	for _, booking := range f.bookings[first:last] {
+		if booking.LoadPercent != nil {
+			load := *booking.LoadPercent
+			booking.LoadPercent = &load
+		}
+		page = append(page, booking)
+	}
+	return page, totalOnFile, nil
+}
+
+// firstIndexAfterLocked mirrors the Postgres keyset predicate: the first
+// booking ordered strictly after the cursor, or len(bookings) if none is.
+func (f *FakeStore) firstIndexAfterLocked(cursor *store.BookingCursor) int {
+	if cursor == nil {
+		return 0
+	}
+	for i, booking := range f.bookings {
+		orderedAfter := booking.DepartsAt.After(cursor.DepartsAt) ||
+			(booking.DepartsAt.Equal(cursor.DepartsAt) && booking.Reference > cursor.Reference)
+		if orderedAfter {
+			return i
+		}
+	}
+	return len(f.bookings)
 }
 
 func (f *FakeStore) CreateUser(ctx context.Context, user *models.User) error {

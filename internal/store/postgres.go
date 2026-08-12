@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -256,6 +257,51 @@ func (s *PostgresStore) ListExpeditionsForUser(ctx context.Context, userID strin
 		out = append(out, e)
 	}
 	return out, rows.Err()
+}
+
+// ListBookings pages by keyset rather than OFFSET: the row comparison matches
+// the ORDER BY exactly, so rows inserted mid-scroll can't shift a page boundary
+// and make a client skip or repeat a booking.
+func (s *PostgresStore) ListBookings(ctx context.Context, cursor *BookingCursor, limit int) ([]models.Booking, int, error) {
+	var afterDeparture *time.Time
+	var afterReference string
+	if cursor != nil {
+		afterDeparture = &cursor.DepartsAt
+		afterReference = cursor.Reference
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT reference, departs_at, destination, portal, load_percent, status,
+		       COALESCE(status_detail, '')
+		FROM bookings
+		WHERE $1::timestamptz IS NULL OR (departs_at, reference) > ($1::timestamptz, $2::text)
+		ORDER BY departs_at, reference
+		LIMIT $3`, afterDeparture, afterReference, limit)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	page := []models.Booking{}
+	for rows.Next() {
+		var booking models.Booking
+		if err := rows.Scan(&booking.Reference, &booking.DepartsAt, &booking.Destination,
+			&booking.Portal, &booking.LoadPercent, &booking.Status, &booking.StatusDetail); err != nil {
+			return nil, 0, err
+		}
+		page = append(page, booking)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+
+	// Counted separately: a window function over the keyset-filtered query
+	// would only count rows after the cursor, not everything on file.
+	totalOnFile := 0
+	if err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM bookings`).Scan(&totalOnFile); err != nil {
+		return nil, 0, err
+	}
+	return page, totalOnFile, nil
 }
 
 func (s *PostgresStore) CreateUser(ctx context.Context, user *models.User) error {

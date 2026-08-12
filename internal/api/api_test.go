@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -9,7 +10,10 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/adescoteaux1/generate-control-tower/internal/models"
+	"github.com/adescoteaux1/generate-control-tower/internal/portals"
 	"github.com/adescoteaux1/generate-control-tower/internal/storetest"
 )
 
@@ -298,6 +302,248 @@ func TestFrontendChallengePage_RendersPlaceholderWithoutResourcesSection(t *test
 	}
 	if strings.Contains(html, "<h2>Resources</h2>") {
 		t.Error("expected no Resources section while there's no curated list for this page yet")
+	}
+}
+
+func TestPortalNetworkStatus_ReturnsSixPortalsWithDerivedStatus(t *testing.T) {
+	srv := newTestServer()
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/frontend/portals")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 without a token, got %d", resp.StatusCode)
+	}
+
+	var body []portalStatusItem
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode portals: %v", err)
+	}
+	if len(body) != 6 {
+		t.Fatalf("expected exactly 6 portals, got %d (%v)", len(body), body)
+	}
+	for i, p := range body {
+		if p.Name != portals.Names[i] {
+			t.Errorf("portal %d: name = %q, want %q", i, p.Name, portals.Names[i])
+		}
+		if p.Load < 0 || p.Load > 100 {
+			t.Errorf("%s: load %d out of range", p.Name, p.Load)
+		}
+		switch p.Status {
+		case portals.StatusOffline:
+			if p.Load != 0 {
+				t.Errorf("%s: offline but reports load %d", p.Name, p.Load)
+			}
+		case portals.StatusUnstable:
+			if p.Load < portals.UnstableLoadThreshold {
+				t.Errorf("%s: unstable but reports load %d, expected %d or above",
+					p.Name, p.Load, portals.UnstableLoadThreshold)
+			}
+		case portals.StatusNominal:
+			if p.Load >= portals.UnstableLoadThreshold {
+				t.Errorf("%s: nominal but reports load %d, expected below %d",
+					p.Name, p.Load, portals.UnstableLoadThreshold)
+			}
+		default:
+			t.Errorf("%s: unexpected status %q", p.Name, p.Status)
+		}
+	}
+}
+
+// defaultBookingLimit mirrors the `default` struct tag on bookingsInput.Limit,
+// which a struct tag can't reference directly.
+const defaultBookingLimit = 10
+
+func getBookings(t *testing.T, baseURL, query string) (*http.Response, bookingsPage) {
+	t.Helper()
+
+	resp, err := http.Get(baseURL + "/frontend/bookings" + query)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var page bookingsPage
+	_ = json.NewDecoder(resp.Body).Decode(&page)
+	return resp, page
+}
+
+func TestBookings_FirstBatchDefaultsToTenWithACursor(t *testing.T) {
+	srv := newTestServer()
+	defer srv.Close()
+
+	resp, page := getBookings(t, srv.URL, "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 without a token, got %d", resp.StatusCode)
+	}
+	if len(page.Items) != defaultBookingLimit {
+		t.Errorf("expected %d items by default, got %d", defaultBookingLimit, len(page.Items))
+	}
+	if page.Total <= len(page.Items) {
+		t.Errorf("expected total (%d) to exceed one batch of %d", page.Total, len(page.Items))
+	}
+	if !page.HasMore {
+		t.Error("expected hasMore on the first of several batches")
+	}
+	if page.NextCursor == "" {
+		t.Error("expected a nextCursor while hasMore is true")
+	}
+}
+
+func TestBookings_RejectsLimitAboveTheCap(t *testing.T) {
+	srv := newTestServer()
+	defer srv.Close()
+
+	resp, _ := getBookings(t, srv.URL, "?limit=100")
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 for an over-sized limit, got %d", resp.StatusCode)
+	}
+}
+
+func TestBookings_RejectsMalformedCursor(t *testing.T) {
+	srv := newTestServer()
+	defer srv.Close()
+
+	for _, cursor := range []string{"not-base64!!", "bm90LWEtY3Vyc29y", "MjAyNi0wMS0wMXxCSy0x"} {
+		resp, _ := getBookings(t, srv.URL, "?cursor="+cursor)
+		if resp.StatusCode != http.StatusUnprocessableEntity {
+			t.Errorf("cursor %q: expected 422, got %d", cursor, resp.StatusCode)
+		}
+	}
+}
+
+func TestBookings_WalksEveryBookingExactlyOnce(t *testing.T) {
+	srv := newTestServer()
+	defer srv.Close()
+
+	seen := map[string]bool{}
+	var total, batches int
+
+	query := ""
+	for {
+		resp, page := getBookings(t, srv.URL, query)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("batch %d: expected 200, got %d", batches, resp.StatusCode)
+		}
+		total = page.Total
+		for _, b := range page.Items {
+			if seen[b.Reference] {
+				t.Errorf("batch %d: %s was returned twice", batches, b.Reference)
+			}
+			seen[b.Reference] = true
+		}
+
+		batches++
+		if !page.HasMore {
+			if page.NextCursor != "" {
+				t.Error("expected no nextCursor on the final batch")
+			}
+			break
+		}
+		if page.NextCursor == "" {
+			t.Fatalf("batch %d: hasMore is true but no cursor to continue from", batches)
+		}
+		if batches > 50 {
+			t.Fatal("hasMore never went false; the scroll does not terminate")
+		}
+		query = "?cursor=" + page.NextCursor
+	}
+
+	if len(seen) != total {
+		t.Errorf("walked %d distinct bookings across %d batches, but total says %d", len(seen), batches, total)
+	}
+}
+
+func TestBookings_ExhaustedCursorReturnsEmptyBatch(t *testing.T) {
+	srv := newTestServer()
+	defer srv.Close()
+
+	// Walk to the final batch, then continue from its last item.
+	var last bookingItem
+	query := ""
+	for {
+		_, page := getBookings(t, srv.URL, query)
+		if len(page.Items) > 0 {
+			last = page.Items[len(page.Items)-1]
+		}
+		if !page.HasMore {
+			break
+		}
+		query = "?cursor=" + page.NextCursor
+	}
+
+	beyond := base64.RawURLEncoding.EncodeToString(
+		[]byte(last.DepartsAt.UTC().Format(time.RFC3339Nano) + "|" + last.Reference))
+	resp, page := getBookings(t, srv.URL, "?cursor="+beyond)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 past the end, got %d", resp.StatusCode)
+	}
+	if len(page.Items) != 0 {
+		t.Errorf("expected no items past the last booking, got %d", len(page.Items))
+	}
+	if page.HasMore || page.NextCursor != "" {
+		t.Error("expected hasMore false and no cursor past the end")
+	}
+	if page.Total == 0 {
+		t.Error("expected total to still report the real count past the end")
+	}
+}
+
+func TestBookings_LimitOfOneStillWalksEverything(t *testing.T) {
+	srv := newTestServer()
+	defer srv.Close()
+
+	seen := map[string]bool{}
+	query := "?limit=1"
+	for {
+		_, page := getBookings(t, srv.URL, query)
+		if len(page.Items) > 1 {
+			t.Fatalf("expected at most 1 item with limit=1, got %d", len(page.Items))
+		}
+		for _, b := range page.Items {
+			seen[b.Reference] = true
+		}
+		if !page.HasMore {
+			if len(seen) != page.Total {
+				t.Errorf("limit=1 walked %d bookings, total says %d", len(seen), page.Total)
+			}
+			return
+		}
+		query = "?limit=1&cursor=" + page.NextCursor
+	}
+}
+
+func TestBookings_ItemsAreOrderedAndInternallyConsistent(t *testing.T) {
+	srv := newTestServer()
+	defer srv.Close()
+
+	_, page := getBookings(t, srv.URL, "")
+	for i, b := range page.Items {
+		if b.Reference == "" || b.Destination == "" || b.Portal == "" {
+			t.Errorf("item %d: missing a required field: %+v", i, b)
+		}
+		if i > 0 && b.DepartsAt.Before(page.Items[i-1].DepartsAt) {
+			t.Errorf("item %d departs before the one before it; expected soonest first", i)
+		}
+		switch b.Status {
+		case string(models.BookingHeld):
+			if b.Load != nil {
+				t.Errorf("%s: held bookings have no load reading, got %d", b.Reference, *b.Load)
+			}
+			if b.StatusDetail == "" {
+				t.Errorf("%s: held bookings carry a reason line", b.Reference)
+			}
+		case string(models.BookingQueued):
+			if b.StatusDetail == "" {
+				t.Errorf("%s: queued bookings carry a reason line", b.Reference)
+			}
+		case string(models.BookingCleared), string(models.BookingCanceled):
+		default:
+			t.Errorf("%s: unexpected status %q", b.Reference, b.Status)
+		}
 	}
 }
 

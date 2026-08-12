@@ -12,6 +12,7 @@ import (
 
 	"github.com/adescoteaux1/generate-control-tower/internal/evaluation"
 	ghub "github.com/adescoteaux1/generate-control-tower/internal/github"
+	"github.com/adescoteaux1/generate-control-tower/internal/portals"
 	"github.com/adescoteaux1/generate-control-tower/internal/store"
 	"github.com/adescoteaux1/generate-control-tower/internal/userauth"
 )
@@ -195,6 +196,57 @@ func (s *Server) applyHandler(ctx context.Context, input *applyInput) (*applyOut
 
 	resp := &applyOutput{}
 	resp.Body = applyResponse{RepoURL: repoURL}
+	return resp, nil
+}
+
+func (s *Server) portalStatusHandler(_ context.Context, _ *portalStatusInput) (*portalStatusOutput, error) {
+	snapshot := portals.Snapshot()
+
+	resp := &portalStatusOutput{Body: make([]portalStatusItem, 0, len(snapshot))}
+	for _, p := range snapshot {
+		resp.Body = append(resp.Body, toPortalStatusItem(p))
+	}
+	return resp, nil
+}
+
+func (s *Server) bookingsHandler(ctx context.Context, input *bookingsInput) (*bookingsOutput, error) {
+	var cursor *store.BookingCursor
+	if input.Cursor != "" {
+		parsed, err := decodeBookingCursor(input.Cursor)
+		if err != nil {
+			return nil, huma.Error422UnprocessableEntity("invalid cursor — pass back a nextCursor verbatim", err)
+		}
+		cursor = parsed
+	}
+
+	// The extra row is never returned: its presence is what proves another
+	// batch follows, without a second query against the keyset window.
+	withLookahead, totalOnFile, err := s.Store.ListBookings(ctx, cursor, input.Limit+1)
+	if err != nil {
+		s.Log.Error("list bookings failed", "error", err)
+		return nil, huma.Error500InternalServerError("internal error")
+	}
+
+	hasMore := len(withLookahead) > input.Limit
+	batch := withLookahead
+	if hasMore {
+		batch = withLookahead[:input.Limit]
+	}
+
+	page := bookingsPage{
+		Items:   make([]bookingItem, 0, len(batch)),
+		HasMore: hasMore,
+		Total:   totalOnFile,
+	}
+	for _, booking := range batch {
+		page.Items = append(page.Items, toBookingItem(booking))
+	}
+	if hasMore {
+		page.NextCursor = encodeBookingCursor(batch[len(batch)-1])
+	}
+
+	resp := &bookingsOutput{}
+	resp.Body = page
 	return resp, nil
 }
 
