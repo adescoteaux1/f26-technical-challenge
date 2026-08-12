@@ -338,18 +338,24 @@ func TestPortalNetworkStatus_ReturnsSixPortalsWithDerivedStatus(t *testing.T) {
 				t.Errorf("%s: offline but reports load %d", p.Name, p.Load)
 			}
 		case portals.StatusUnstable:
-			if p.Load < 80 {
-				t.Errorf("%s: unstable but reports load %d, expected 80 or above", p.Name, p.Load)
+			if p.Load < portals.UnstableLoadThreshold {
+				t.Errorf("%s: unstable but reports load %d, expected %d or above",
+					p.Name, p.Load, portals.UnstableLoadThreshold)
 			}
 		case portals.StatusNominal:
-			if p.Load >= 80 {
-				t.Errorf("%s: nominal but reports load %d, expected below 80", p.Name, p.Load)
+			if p.Load >= portals.UnstableLoadThreshold {
+				t.Errorf("%s: nominal but reports load %d, expected below %d",
+					p.Name, p.Load, portals.UnstableLoadThreshold)
 			}
 		default:
 			t.Errorf("%s: unexpected status %q", p.Name, p.Status)
 		}
 	}
 }
+
+// defaultBookingLimit mirrors the `default` struct tag on bookingsInput.Limit,
+// which a struct tag can't reference directly.
+const defaultBookingLimit = 10
 
 func getBookings(t *testing.T, baseURL, query string) (*http.Response, bookingsPage) {
 	t.Helper()
@@ -373,8 +379,8 @@ func TestBookings_FirstBatchDefaultsToTenWithACursor(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200 without a token, got %d", resp.StatusCode)
 	}
-	if len(page.Items) != 10 {
-		t.Errorf("expected 10 items by default, got %d", len(page.Items))
+	if len(page.Items) != defaultBookingLimit {
+		t.Errorf("expected %d items by default, got %d", defaultBookingLimit, len(page.Items))
 	}
 	if page.Total <= len(page.Items) {
 		t.Errorf("expected total (%d) to exceed one batch of %d", page.Total, len(page.Items))

@@ -14,10 +14,13 @@ const (
 	StatusOffline  = "offline"
 )
 
+// UnstableLoadThreshold is the load at or above which a portal reports
+// unstable. Exported because it's part of the endpoint's published contract.
+const UnstableLoadThreshold = 80
+
 const (
-	maxLoad               = 100
-	unstableLoadThreshold = 80
-	offlineChanceOneIn    = 8
+	maxLoad            = 100
+	offlineChanceOneIn = 8
 )
 
 // Names are the six portals the console renders, in display order.
@@ -53,18 +56,11 @@ func Snapshot() []Portal {
 }
 
 func snapshotAt(t time.Time) []Portal {
-	rng := rand.New(rand.NewSource(hourSeed(t)))
-	requiredStatuses := reserveGuaranteedStatuses(rng)
+	states := drawStates(rand.New(rand.NewSource(hourSeed(t))))
 
-	snapshot := make([]Portal, 0, len(Names))
+	snapshot := make([]Portal, len(Names))
 	for i, name := range Names {
-		online, load := sampleState(rng, requiredStatuses[i])
-		snapshot = append(snapshot, Portal{
-			Name:   name,
-			Online: online,
-			Status: StatusFor(online, load),
-			Load:   load,
-		})
+		snapshot[i] = newPortal(name, states[i])
 	}
 	return snapshot
 }
@@ -73,34 +69,55 @@ func hourSeed(t time.Time) int64 {
 	return t.UTC().Truncate(time.Hour).Unix()
 }
 
-// reserveGuaranteedStatuses returns, per portal, the status it must report this
-// hour. Portals left empty are unconstrained.
-func reserveGuaranteedStatuses(rng *rand.Rand) []string {
-	required := make([]string, len(Names))
+// portalState is the pair a portal's status is derived from.
+type portalState struct {
+	online bool
+	load   int
+}
+
+// drawStates gives every portal a freely drawn state, then overwrites one
+// randomly chosen portal per guaranteed status.
+func drawStates(rng *rand.Rand) []portalState {
+	states := make([]portalState, len(Names))
+	for i := range states {
+		states[i] = drawFreely(rng)
+	}
 	for i, portalIndex := range rng.Perm(len(Names))[:len(guaranteedStatuses)] {
-		required[portalIndex] = guaranteedStatuses[i]
+		states[portalIndex] = drawMatching(rng, guaranteedStatuses[i])
 	}
-	return required
+	return states
 }
 
-func sampleState(rng *rand.Rand, requiredStatus string) (online bool, load int) {
-	switch requiredStatus {
-	case StatusOffline:
-		return false, 0
-	case StatusUnstable:
-		return true, unstableLoadThreshold + rng.Intn(maxLoad-unstableLoadThreshold)
-	case StatusNominal:
-		return true, rng.Intn(unstableLoadThreshold)
-	default:
-		return sampleUnconstrainedState(rng)
-	}
-}
-
-func sampleUnconstrainedState(rng *rand.Rand) (online bool, load int) {
+func drawFreely(rng *rand.Rand) portalState {
 	if rng.Intn(offlineChanceOneIn) == 0 {
-		return false, 0
+		return portalState{online: false, load: 0}
 	}
-	return true, rng.Intn(maxLoad)
+	return portalState{online: true, load: rng.Intn(maxLoad)}
+}
+
+// drawMatching draws a state that StatusFor will report as status.
+func drawMatching(rng *rand.Rand, status string) portalState {
+	switch status {
+	case StatusOffline:
+		return portalState{online: false, load: 0}
+	case StatusUnstable:
+		return portalState{online: true, load: UnstableLoadThreshold + rng.Intn(maxLoad-UnstableLoadThreshold)}
+	case StatusNominal:
+		return portalState{online: true, load: rng.Intn(UnstableLoadThreshold)}
+	default:
+		panic("portals: no state draw defined for status " + status)
+	}
+}
+
+// newPortal is the only place a Portal is built, so Status is always derived
+// and never assigned.
+func newPortal(name string, state portalState) Portal {
+	return Portal{
+		Name:   name,
+		Online: state.online,
+		Status: StatusFor(state.online, state.load),
+		Load:   state.load,
+	}
 }
 
 // StatusFor derives a portal's status; it is never assigned directly.
@@ -108,7 +125,7 @@ func StatusFor(online bool, load int) string {
 	switch {
 	case !online:
 		return StatusOffline
-	case load >= unstableLoadThreshold:
+	case load >= UnstableLoadThreshold:
 		return StatusUnstable
 	default:
 		return StatusNominal
