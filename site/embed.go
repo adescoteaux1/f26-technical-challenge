@@ -5,7 +5,17 @@
 // editing that file takes effect on the next request with no rebuild.
 package site
 
-import _ "embed"
+import (
+	"embed"
+	_ "embed"
+)
+
+// Assets holds the design exports referenced by the challenge specs. Served
+// under /site/assets/ so the same relative markdown path resolves both on the
+// rendered page and when the .md is read directly on GitHub.
+//
+//go:embed assets/*.png
+var Assets embed.FS
 
 //go:embed index.html
 var IndexHTML string

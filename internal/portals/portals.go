@@ -38,12 +38,11 @@ var Names = []string{
 // to render. Left to chance, roughly one hour in seven came back all-nominal.
 var guaranteedStatuses = []string{StatusOffline, StatusUnstable, StatusNominal}
 
-// Portal is one card in the panel. Online reports the containment field, Load
-// reports traffic: an online portal carrying nothing is idle at 0 load, which
-// is a different state from being offline.
+// Portal is one card in the panel, and mirrors exactly what the endpoint
+// returns. Whether the containment field is up is a generation-time detail
+// (see portalState); downstream, that distinction lives in Status.
 type Portal struct {
 	Name   string
-	Online bool
 	Status string
 	Load   int
 }
@@ -69,7 +68,9 @@ func hourSeed(t time.Time) int64 {
 	return t.UTC().Truncate(time.Hour).Unix()
 }
 
-// portalState is the pair a portal's status is derived from.
+// portalState is the pair a portal's status is derived from. A portal with no
+// traffic is idle at 0 load, which is a different state from being offline, so
+// the two facts stay separate until Status is computed.
 type portalState struct {
 	online bool
 	load   int
@@ -95,7 +96,7 @@ func drawFreely(rng *rand.Rand) portalState {
 	return portalState{online: true, load: rng.Intn(maxLoad)}
 }
 
-// drawMatching draws a state that StatusFor will report as status.
+// drawMatching draws a state that statusFor will report as status.
 func drawMatching(rng *rand.Rand, status string) portalState {
 	switch status {
 	case StatusOffline:
@@ -114,14 +115,12 @@ func drawMatching(rng *rand.Rand, status string) portalState {
 func newPortal(name string, state portalState) Portal {
 	return Portal{
 		Name:   name,
-		Online: state.online,
-		Status: StatusFor(state.online, state.load),
+		Status: statusFor(state.online, state.load),
 		Load:   state.load,
 	}
 }
 
-// StatusFor derives a portal's status; it is never assigned directly.
-func StatusFor(online bool, load int) string {
+func statusFor(online bool, load int) string {
 	switch {
 	case !online:
 		return StatusOffline

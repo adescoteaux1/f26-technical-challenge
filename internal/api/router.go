@@ -23,6 +23,7 @@ func NewRouter(s *Server) http.Handler {
 	})
 
 	r.Get("/", landingPageHandler)
+	r.Handle("/site/assets/*", assetsHandler())
 	r.Get("/style.css", stylesheetHandler)
 	r.Get("/no-copy.js", noCopyScriptHandler)
 	r.Get("/challenge", challengePageHandler)
@@ -144,6 +145,30 @@ func NewRouter(s *Server) http.Handler {
 			"return — limit is capped at 10, so the console has to page through them.",
 		Tags: []string{"Frontend"},
 	}, s.bookingsHandler)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "list-transit-slots",
+		Method:      http.MethodGet,
+		Path:        "/frontend/slots",
+		Summary:     "Bookable transit slots",
+		Description: "The inventory a booking flow is built from. Stable across restarts, so a " +
+			"slot ID stays valid; how you present, filter or sequence them is up to you.",
+		Tags: []string{"Frontend"},
+	}, s.transitSlotsHandler)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "submit-booking",
+		Method:      http.MethodPost,
+		Path:        "/frontend/slots/{slotId}/book",
+		Summary:     "Submit a booking for a slot",
+		Description: "Roughly 30% of submissions fail at random. Every response carries the same " +
+			"body, so reading status is enough to tell what happened, and retryable says whether " +
+			"resubmitting unchanged could work. Outcomes that are real answers (confirmed, " +
+			"slot_taken, insufficient_seats) return 200; a corridor failure returns 503 because " +
+			"the booking never completed. Use GET /chaos/probe when you need a reproducible " +
+			"failure for a test.",
+		Tags: []string{"Frontend"},
+	}, s.submitBookingHandler)
 
 	return r
 }

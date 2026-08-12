@@ -48,6 +48,19 @@ var challengeResources = []resourceLink{
 	{"Martin Fowler: Test Double", "https://martinfowler.com/bliki/TestDouble.html"},
 }
 
+// frontendChallengeResources are shown under the operations console spec.
+// Framework-neutral on purpose, and limited to things an applicant wouldn't
+// trip over on their own: a build tool or component library they'd pick in
+// the first five minutes doesn't belong here.
+var frontendChallengeResources = []resourceLink{
+	{"Tailwind CSS", "https://tailwindcss.com/docs"},
+	{"MDN: Intersection Observer — triggering the next page on scroll", "https://developer.mozilla.org/en-US/docs/Web/API/Intersection_Observer_API"},
+	{"MDN: AbortController — cancelling in-flight requests", "https://developer.mozilla.org/en-US/docs/Web/API/AbortController"},
+	{"TanStack Query — caching and revalidation, with adapters for most frameworks", "https://tanstack.com/query/latest"},
+	{"Nielsen Norman Group: error message guidelines", "https://www.nngroup.com/articles/error-message-guidelines/"},
+	{"web.dev: Learn Accessibility", "https://web.dev/learn/accessibility"},
+}
+
 var markdownPageTemplate = template.Must(template.New("markdown-page").Parse(`<!doctype html>
 <html lang="en">
 <head>
@@ -110,6 +123,13 @@ func markdownPage(mdPath, title string, resources []resourceLink) http.HandlerFu
 	}
 }
 
+// assetsHandler serves the embedded design exports. The route is mounted at
+// the assets' own repo path (/site/assets/...) so that a relative image link
+// in a spec markdown file resolves correctly both here and on GitHub.
+func assetsHandler() http.Handler {
+	return http.StripPrefix("/site/", http.FileServer(http.FS(site.Assets)))
+}
+
 // landingPageHandler serves the embedded static landing page.
 func landingPageHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -142,11 +162,8 @@ var challengePageHandler = markdownPage(
 	challengeResources,
 )
 
-// frontendChallengePageHandler has no resources list yet — FRONTEND_CHALLENGE.md
-// is currently a placeholder (see that file), so there's nothing curated to
-// point at until the real spec exists.
 var frontendChallengePageHandler = markdownPage(
 	repoRootPath("FRONTEND_CHALLENGE.md"),
 	"Nexus Transit Authority — Operations Console Challenge",
-	nil,
+	frontendChallengeResources,
 )

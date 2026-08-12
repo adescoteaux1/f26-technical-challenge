@@ -23,6 +23,8 @@ var publicOperations = map[string]bool{
 	"apply":                 true,
 	"portal-network-status": true,
 	"list-bookings":         true,
+	"list-transit-slots":    true,
+	"submit-booking":        true,
 }
 
 // authMiddleware extracts a bearer token from the Authorization header,
