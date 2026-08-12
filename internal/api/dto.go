@@ -4,10 +4,14 @@
 package api
 
 import (
+	"encoding/base64"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/adescoteaux1/generate-control-tower/internal/engine"
 	"github.com/adescoteaux1/generate-control-tower/internal/models"
+	"github.com/adescoteaux1/generate-control-tower/internal/portals"
 	"github.com/adescoteaux1/generate-control-tower/internal/store"
 )
 
@@ -136,6 +140,82 @@ type applyResponse struct {
 	RepoURL string `json:"repoUrl" doc:"URL of your challenge repo; you now have push access to it"`
 }
 
+// frontendHelloResponse is a placeholder payload for the operations console.
+type frontendHelloResponse struct {
+	Message string `json:"message" doc:"Placeholder greeting"`
+}
+
+// portalStatusItem is one row of the console's Portal Network Status panel.
+type portalStatusItem struct {
+	Name   string `json:"name" doc:"Portal display name"`
+	Status string `json:"status" enum:"nominal,unstable,offline" doc:"offline when the containment field is down, unstable at 80 load or above, nominal otherwise"`
+	Load   int    `json:"load" minimum:"0" maximum:"100" doc:"Current load percentage; always 0 while offline, but an online portal with no traffic is also 0"`
+}
+
+func toPortalStatusItem(p portals.Portal) portalStatusItem {
+	return portalStatusItem{
+		Name:   p.Name,
+		Status: p.Status,
+		Load:   p.Load,
+	}
+}
+
+// bookingItem is one card in the console's "My Upcoming Transits" panel.
+type bookingItem struct {
+	Reference    string    `json:"reference" doc:"Booking reference, e.g. BK-4417"`
+	DepartsAt    time.Time `json:"departsAt" doc:"Scheduled departure time"`
+	Destination  string    `json:"destination" doc:"Destination designation, e.g. Alpha-7"`
+	Portal       string    `json:"portal" doc:"Portal this transit routes through; unrelated to GET /frontend/portals"`
+	Load         *int      `json:"load" doc:"Corridor load percentage recorded for this booking; null when the corridor was offline"`
+	Status       string    `json:"status" enum:"cleared,queued,held,canceled" doc:"Stored reservation status"`
+	StatusDetail string    `json:"statusDetail,omitempty" doc:"Secondary reason line, e.g. Corridor Unstable; omitted when there is none"`
+}
+
+func toBookingItem(b models.Booking) bookingItem {
+	return bookingItem{
+		Reference:    b.Reference,
+		DepartsAt:    b.DepartsAt,
+		Destination:  b.Destination,
+		Portal:       b.Portal,
+		Load:         b.LoadPercent,
+		Status:       string(b.Status),
+		StatusDetail: b.StatusDetail,
+	}
+}
+
+// bookingsPage is one window of an infinite scroll: feed nextCursor back as
+// ?cursor= to append the following batch. Total is still reported so the panel
+// header can say "46 reservations on file" without walking every page.
+type bookingsPage struct {
+	Items      []bookingItem `json:"items" doc:"Bookings in this batch, soonest departure first"`
+	NextCursor string        `json:"nextCursor,omitempty" doc:"Pass as ?cursor= to fetch the next batch; omitted on the last one"`
+	HasMore    bool          `json:"hasMore" doc:"True when another batch follows this one"`
+	Total      int           `json:"total" doc:"Total bookings on file, not just in this batch"`
+}
+
+// Booking cursors are opaque on the wire so the keyset encoding stays a server
+// concern, but they're just the ORDER BY tuple: departure time and reference.
+func encodeBookingCursor(b models.Booking) string {
+	raw := b.DepartsAt.UTC().Format(time.RFC3339Nano) + "|" + b.Reference
+	return base64.RawURLEncoding.EncodeToString([]byte(raw))
+}
+
+func decodeBookingCursor(encoded string) (*store.BookingCursor, error) {
+	raw, err := base64.RawURLEncoding.DecodeString(encoded)
+	if err != nil {
+		return nil, fmt.Errorf("cursor is not valid base64: %w", err)
+	}
+	ts, ref, ok := strings.Cut(string(raw), "|")
+	if !ok || ref == "" {
+		return nil, fmt.Errorf("cursor is missing its reference half")
+	}
+	departsAt, err := time.Parse(time.RFC3339Nano, ts)
+	if err != nil {
+		return nil, fmt.Errorf("cursor has an unparseable timestamp: %w", err)
+	}
+	return &store.BookingCursor{DepartsAt: departsAt, Reference: ref}, nil
+}
+
 // --- Huma operation Input/Output wrappers ---
 //
 // Huma generates the OpenAPI request/response schemas (and therefore the
@@ -205,4 +285,28 @@ type applyInput struct {
 
 type applyOutput struct {
 	Body applyResponse
+}
+
+type frontendHelloInput struct{}
+
+type frontendHelloOutput struct {
+	Body frontendHelloResponse
+}
+
+type portalStatusInput struct{}
+
+type portalStatusOutput struct {
+	Body []portalStatusItem
+}
+
+// bookingsInput's maximum on Limit is what forces clients to paginate: there
+// are far more bookings on file than any single request can return, and Huma
+// rejects an over-sized limit with a 422 rather than clamping it.
+type bookingsInput struct {
+	Cursor string `query:"cursor" doc:"nextCursor from the previous response; omit to start at the first batch"`
+	Limit  int    `query:"limit" default:"10" minimum:"1" maximum:"10" doc:"Bookings per batch; 10 is the hard maximum"`
+}
+
+type bookingsOutput struct {
+	Body bookingsPage
 }

@@ -177,3 +177,33 @@ type User struct {
 	Token     string    `json:"-"`
 	CreatedAt time.Time `json:"createdAt"`
 }
+
+// BookingStatus is a transit reservation's state. Unlike a portal's status it
+// is a stored fact, not derived from anything.
+type BookingStatus string
+
+const (
+	BookingCleared  BookingStatus = "cleared"
+	BookingQueued   BookingStatus = "queued"
+	BookingHeld     BookingStatus = "held"
+	BookingCanceled BookingStatus = "canceled"
+)
+
+// Booking is one reservation in a traveler's transit list. Portal names here
+// are independent of internal/portals — the two panels are separate data sets.
+type Booking struct {
+	Reference   string
+	DepartsAt   time.Time
+	Destination string
+	Portal      string
+
+	// LoadPercent is the corridor load recorded for this booking, or nil when
+	// the corridor was offline and no reading was taken.
+	LoadPercent *int
+
+	Status BookingStatus
+
+	// StatusDetail is the secondary reason line ("Corridor Unstable"), empty
+	// for statuses that don't have one.
+	StatusDetail string
+}

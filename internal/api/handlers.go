@@ -12,6 +12,7 @@ import (
 
 	"github.com/adescoteaux1/generate-control-tower/internal/evaluation"
 	ghub "github.com/adescoteaux1/generate-control-tower/internal/github"
+	"github.com/adescoteaux1/generate-control-tower/internal/portals"
 	"github.com/adescoteaux1/generate-control-tower/internal/store"
 	"github.com/adescoteaux1/generate-control-tower/internal/userauth"
 )
@@ -195,6 +196,62 @@ func (s *Server) applyHandler(ctx context.Context, input *applyInput) (*applyOut
 
 	resp := &applyOutput{}
 	resp.Body = applyResponse{RepoURL: repoURL}
+	return resp, nil
+}
+
+func (s *Server) frontendHelloHandler(_ context.Context, _ *frontendHelloInput) (*frontendHelloOutput, error) {
+	resp := &frontendHelloOutput{}
+	resp.Body = frontendHelloResponse{Message: "hello"}
+	return resp, nil
+}
+
+func (s *Server) portalStatusHandler(_ context.Context, _ *portalStatusInput) (*portalStatusOutput, error) {
+	snapshot := portals.Snapshot()
+
+	resp := &portalStatusOutput{Body: make([]portalStatusItem, 0, len(snapshot))}
+	for _, p := range snapshot {
+		resp.Body = append(resp.Body, toPortalStatusItem(p))
+	}
+	return resp, nil
+}
+
+func (s *Server) bookingsHandler(ctx context.Context, input *bookingsInput) (*bookingsOutput, error) {
+	var cursor *store.BookingCursor
+	if input.Cursor != "" {
+		parsed, err := decodeBookingCursor(input.Cursor)
+		if err != nil {
+			return nil, huma.Error422UnprocessableEntity("invalid cursor — pass back a nextCursor verbatim", err)
+		}
+		cursor = parsed
+	}
+
+	// One extra row is what tells us whether another batch follows, without a
+	// second count query against the keyset window.
+	bookings, total, err := s.Store.ListBookings(ctx, cursor, input.Limit+1)
+	if err != nil {
+		s.Log.Error("list bookings failed", "error", err)
+		return nil, huma.Error500InternalServerError("internal error")
+	}
+
+	hasMore := len(bookings) > input.Limit
+	if hasMore {
+		bookings = bookings[:input.Limit]
+	}
+
+	page := bookingsPage{
+		Items:   make([]bookingItem, 0, len(bookings)),
+		HasMore: hasMore,
+		Total:   total,
+	}
+	for _, b := range bookings {
+		page.Items = append(page.Items, toBookingItem(b))
+	}
+	if hasMore {
+		page.NextCursor = encodeBookingCursor(bookings[len(bookings)-1])
+	}
+
+	resp := &bookingsOutput{}
+	resp.Body = page
 	return resp, nil
 }
 

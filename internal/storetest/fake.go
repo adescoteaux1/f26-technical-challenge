@@ -14,7 +14,9 @@ package storetest
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
+	"time"
 
 	"github.com/adescoteaux1/generate-control-tower/internal/models"
 	"github.com/adescoteaux1/generate-control-tower/internal/store"
@@ -26,6 +28,7 @@ type FakeStore struct {
 	expeditions map[string]*store.ExpeditionRow
 	cycles      map[string]map[int][]byte // JSON-encoded models.Cycle
 	users       map[string]models.User    // keyed by user ID
+	bookings    []models.Booking          // pre-seeded, ordered by departure
 
 	// expeditionLocksMu guards expeditionLocks itself, kept separate from mu
 	// (which guards the data above) so WithExpeditionLock can hold a
@@ -40,7 +43,44 @@ func New() *FakeStore {
 		expeditions: map[string]*store.ExpeditionRow{},
 		cycles:      map[string]map[int][]byte{},
 		users:       map[string]models.User{},
+		bookings:    seedBookings(),
 	}
+}
+
+// bookingSeedCount mirrors the row count in the bookings migration so
+// pagination tests exercise the same multi-page shape as a real database.
+const bookingSeedCount = 46
+
+func seedBookings() []models.Booking {
+	statuses := []models.BookingStatus{
+		models.BookingCleared, models.BookingCleared, models.BookingQueued,
+		models.BookingCleared, models.BookingHeld, models.BookingCanceled,
+	}
+	base := time.Date(2026, 8, 12, 7, 15, 0, 0, time.UTC)
+
+	out := make([]models.Booking, 0, bookingSeedCount)
+	for i := range bookingSeedCount {
+		b := models.Booking{
+			Reference:   fmt.Sprintf("BK-%d", 4417+i),
+			DepartsAt:   base.AddDate(0, 0, i*2),
+			Destination: fmt.Sprintf("Dest-%d", i%10),
+			Portal:      fmt.Sprintf("Portal %d", i%8),
+			Status:      statuses[i%len(statuses)],
+		}
+		switch b.Status {
+		case models.BookingHeld:
+			b.StatusDetail = "Corridor Offline"
+		case models.BookingQueued:
+			load := 80 + i%20
+			b.LoadPercent = &load
+			b.StatusDetail = "Corridor Unstable"
+		default:
+			load := 31 + i%48
+			b.LoadPercent = &load
+		}
+		out = append(out, b)
+	}
+	return out
 }
 
 func (f *FakeStore) CreateExpedition(ctx context.Context, exp *models.Expedition) error {
@@ -145,6 +185,38 @@ func (f *FakeStore) ListExpeditionsForUser(ctx context.Context, userID string) (
 		out = append(out, store.ExpeditionSummary{ID: row.ID, Finished: row.Finished, OverallScore: row.OverallScore, Metrics: row.Metrics})
 	}
 	return out, nil
+}
+
+func (f *FakeStore) ListBookings(ctx context.Context, cursor *store.BookingCursor, limit int) ([]models.Booking, int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	total := len(f.bookings)
+
+	// Mirror the Postgres keyset predicate: first row ordered strictly after
+	// (cursor.DepartsAt, cursor.Reference).
+	start := 0
+	if cursor != nil {
+		start = total
+		for i, b := range f.bookings {
+			if b.DepartsAt.After(cursor.DepartsAt) ||
+				(b.DepartsAt.Equal(cursor.DepartsAt) && b.Reference > cursor.Reference) {
+				start = i
+				break
+			}
+		}
+	}
+
+	end := min(start+limit, total)
+	page := make([]models.Booking, 0, end-start)
+	for _, b := range f.bookings[start:end] {
+		if b.LoadPercent != nil {
+			load := *b.LoadPercent
+			b.LoadPercent = &load
+		}
+		page = append(page, b)
+	}
+	return page, total, nil
 }
 
 func (f *FakeStore) CreateUser(ctx context.Context, user *models.User) error {

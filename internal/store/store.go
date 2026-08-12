@@ -46,6 +46,15 @@ type ExpeditionSummary struct {
 	CreatedAt    time.Time
 }
 
+// BookingCursor is the keyset position a booking page resumes from. Departure
+// time alone isn't unique, so the reference tie-breaks it — together they match
+// the ORDER BY, which is what keeps paging stable when rows are inserted
+// mid-scroll.
+type BookingCursor struct {
+	DepartsAt time.Time
+	Reference string
+}
+
 // Store is the persistence boundary the expedition engine depends on. Kept
 // as an interface so the Postgres implementation can be swapped (e.g. for an
 // in-memory fake in tests) without touching orchestration logic.
@@ -73,6 +82,11 @@ type Store interface {
 
 	// ListExpeditionsForUser returns a user's expedition history, newest first.
 	ListExpeditionsForUser(ctx context.Context, userID string) ([]ExpeditionSummary, error)
+
+	// ListBookings returns up to limit transit bookings ordered by departure
+	// time, soonest first, starting after cursor (nil for the first page),
+	// alongside the total number of bookings on file.
+	ListBookings(ctx context.Context, cursor *BookingCursor, limit int) ([]models.Booking, int, error)
 
 	// CreateUser persists a new user. Returns ErrAlreadyExists if the email is taken.
 	CreateUser(ctx context.Context, user *models.User) error

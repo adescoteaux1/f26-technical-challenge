@@ -18,9 +18,12 @@ const userContextKey contextKey = iota
 
 // publicOperations lists the operation IDs that don't require a bearer token.
 var publicOperations = map[string]bool{
-	"register": true,
-	"login":    true,
-	"apply":    true,
+	"register":              true,
+	"login":                 true,
+	"apply":                 true,
+	"frontend-hello":        true,
+	"portal-network-status": true,
+	"list-bookings":         true,
 }
 
 // authMiddleware extracts a bearer token from the Authorization header,
