@@ -53,14 +53,7 @@ func Snapshot() []Portal {
 }
 
 func snapshotAt(t time.Time) []Portal {
-	return snapshot(rand.New(rand.NewSource(hourSeed(t))))
-}
-
-func hourSeed(t time.Time) int64 {
-	return t.UTC().Truncate(time.Hour).Unix()
-}
-
-func snapshot(rng *rand.Rand) []Portal {
+	rng := rand.New(rand.NewSource(hourSeed(t)))
 	requiredStatuses := reserveGuaranteedStatuses(rng)
 
 	snapshot := make([]Portal, 0, len(Names))
@@ -74,6 +67,10 @@ func snapshot(rng *rand.Rand) []Portal {
 		})
 	}
 	return snapshot
+}
+
+func hourSeed(t time.Time) int64 {
+	return t.UTC().Truncate(time.Hour).Unix()
 }
 
 // reserveGuaranteedStatuses returns, per portal, the status it must report this

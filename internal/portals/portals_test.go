@@ -1,11 +1,15 @@
 package portals
 
 import (
-	"math/rand"
 	"reflect"
 	"testing"
 	"time"
 )
+
+// hourOffset walks distinct clock hours, which map one-to-one onto seeds.
+func hourOffset(h int) time.Time {
+	return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC).Add(time.Duration(h) * time.Hour)
+}
 
 func TestStatusFor_DerivesFromOnlineAndLoad(t *testing.T) {
 	cases := []struct {
@@ -67,17 +71,17 @@ func TestSnapshot_ReturnsAllSixPortalsInOrder(t *testing.T) {
 // Loads are random, so check the invariants that must hold for every seed
 // rather than specific values.
 func TestSnapshot_LoadInRangeAndStatusConsistent(t *testing.T) {
-	for seed := range int64(200) {
-		for _, p := range snapshot(rand.New(rand.NewSource(seed))) {
+	for hour := range 200 {
+		for _, p := range snapshotAt(hourOffset(hour)) {
 			if p.Load < 0 || p.Load > 100 {
-				t.Fatalf("seed %d: %s load %d out of range", seed, p.Name, p.Load)
+				t.Fatalf("hour +%d: %s load %d out of range", hour, p.Name, p.Load)
 			}
 			if !p.Online && p.Load != 0 {
-				t.Fatalf("seed %d: %s is offline but reports load %d", seed, p.Name, p.Load)
+				t.Fatalf("hour +%d: %s is offline but reports load %d", hour, p.Name, p.Load)
 			}
 			if want := StatusFor(p.Online, p.Load); p.Status != want {
-				t.Fatalf("seed %d: %s status %q does not match online=%t load=%d (want %q)",
-					seed, p.Name, p.Status, p.Online, p.Load, want)
+				t.Fatalf("hour +%d: %s status %q does not match online=%t load=%d (want %q)",
+					hour, p.Name, p.Status, p.Online, p.Load, want)
 			}
 		}
 	}
@@ -87,14 +91,14 @@ func TestSnapshot_LoadInRangeAndStatusConsistent(t *testing.T) {
 // eventually: the console needs an offline chip and an unstable badge to
 // render in any given hour.
 func TestSnapshot_AlwaysContainsEveryStatus(t *testing.T) {
-	for seed := range int64(500) {
+	for hour := range 500 {
 		seen := map[string]bool{}
-		for _, p := range snapshot(rand.New(rand.NewSource(seed))) {
+		for _, p := range snapshotAt(hourOffset(hour)) {
 			seen[p.Status] = true
 		}
 		for _, status := range []string{StatusNominal, StatusUnstable, StatusOffline} {
 			if !seen[status] {
-				t.Fatalf("seed %d: snapshot has no %q portal (got %v)", seed, status, seen)
+				t.Fatalf("hour +%d: snapshot has no %q portal (got %v)", hour, status, seen)
 			}
 		}
 	}
@@ -121,16 +125,16 @@ func TestSnapshot_OfflinePortalVariesAcrossHours(t *testing.T) {
 // The point of tracking Online separately: a healthy portal with no traffic
 // must read as nominal at 0 load, not as offline.
 func TestSnapshot_ProducesIdleOnlinePortal(t *testing.T) {
-	for seed := range int64(500) {
-		for _, p := range snapshot(rand.New(rand.NewSource(seed))) {
+	for hour := range 500 {
+		for _, p := range snapshotAt(hourOffset(hour)) {
 			if p.Online && p.Load == 0 {
 				if p.Status != StatusNominal {
-					t.Fatalf("seed %d: idle online portal %s reported %q, want %q",
-						seed, p.Name, p.Status, StatusNominal)
+					t.Fatalf("hour +%d: idle online portal %s reported %q, want %q",
+						hour, p.Name, p.Status, StatusNominal)
 				}
 				return
 			}
 		}
 	}
-	t.Error("no snapshot across 500 seeds produced an online portal at 0 load")
+	t.Error("no snapshot across 500 hours produced an online portal at 0 load")
 }
