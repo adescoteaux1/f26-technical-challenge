@@ -49,38 +49,41 @@ func New() *FakeStore {
 
 // bookingSeedCount mirrors the row count in the bookings migration so
 // pagination tests exercise the same multi-page shape as a real database.
-const bookingSeedCount = 46
+const (
+	bookingSeedCount        = 46
+	firstBookingReferenceNo = 4417
+)
 
 func seedBookings() []models.Booking {
-	statuses := []models.BookingStatus{
+	statusCycle := []models.BookingStatus{
 		models.BookingCleared, models.BookingCleared, models.BookingQueued,
 		models.BookingCleared, models.BookingHeld, models.BookingCanceled,
 	}
-	base := time.Date(2026, 8, 12, 7, 15, 0, 0, time.UTC)
+	firstDeparture := time.Date(2026, 8, 12, 7, 15, 0, 0, time.UTC)
 
-	out := make([]models.Booking, 0, bookingSeedCount)
+	seeded := make([]models.Booking, 0, bookingSeedCount)
 	for i := range bookingSeedCount {
-		b := models.Booking{
-			Reference:   fmt.Sprintf("BK-%d", 4417+i),
-			DepartsAt:   base.AddDate(0, 0, i*2),
+		booking := models.Booking{
+			Reference:   fmt.Sprintf("BK-%d", firstBookingReferenceNo+i),
+			DepartsAt:   firstDeparture.AddDate(0, 0, i*2),
 			Destination: fmt.Sprintf("Dest-%d", i%10),
 			Portal:      fmt.Sprintf("Portal %d", i%8),
-			Status:      statuses[i%len(statuses)],
+			Status:      statusCycle[i%len(statusCycle)],
 		}
-		switch b.Status {
+		switch booking.Status {
 		case models.BookingHeld:
-			b.StatusDetail = "Corridor Offline"
+			booking.StatusDetail = "Corridor Offline"
 		case models.BookingQueued:
 			load := 80 + i%20
-			b.LoadPercent = &load
-			b.StatusDetail = "Corridor Unstable"
+			booking.LoadPercent = &load
+			booking.StatusDetail = "Corridor Unstable"
 		default:
 			load := 31 + i%48
-			b.LoadPercent = &load
+			booking.LoadPercent = &load
 		}
-		out = append(out, b)
+		seeded = append(seeded, booking)
 	}
-	return out
+	return seeded
 }
 
 func (f *FakeStore) CreateExpedition(ctx context.Context, exp *models.Expedition) error {
@@ -191,32 +194,36 @@ func (f *FakeStore) ListBookings(ctx context.Context, cursor *store.BookingCurso
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	total := len(f.bookings)
+	totalOnFile := len(f.bookings)
 
-	// Mirror the Postgres keyset predicate: first row ordered strictly after
-	// (cursor.DepartsAt, cursor.Reference).
-	start := 0
-	if cursor != nil {
-		start = total
-		for i, b := range f.bookings {
-			if b.DepartsAt.After(cursor.DepartsAt) ||
-				(b.DepartsAt.Equal(cursor.DepartsAt) && b.Reference > cursor.Reference) {
-				start = i
-				break
-			}
+	first := f.firstIndexAfterLocked(cursor)
+	last := min(first+limit, totalOnFile)
+
+	page := make([]models.Booking, 0, last-first)
+	for _, booking := range f.bookings[first:last] {
+		if booking.LoadPercent != nil {
+			load := *booking.LoadPercent
+			booking.LoadPercent = &load
+		}
+		page = append(page, booking)
+	}
+	return page, totalOnFile, nil
+}
+
+// firstIndexAfterLocked mirrors the Postgres keyset predicate: the first
+// booking ordered strictly after the cursor, or len(bookings) if none is.
+func (f *FakeStore) firstIndexAfterLocked(cursor *store.BookingCursor) int {
+	if cursor == nil {
+		return 0
+	}
+	for i, booking := range f.bookings {
+		orderedAfter := booking.DepartsAt.After(cursor.DepartsAt) ||
+			(booking.DepartsAt.Equal(cursor.DepartsAt) && booking.Reference > cursor.Reference)
+		if orderedAfter {
+			return i
 		}
 	}
-
-	end := min(start+limit, total)
-	page := make([]models.Booking, 0, end-start)
-	for _, b := range f.bookings[start:end] {
-		if b.LoadPercent != nil {
-			load := *b.LoadPercent
-			b.LoadPercent = &load
-		}
-		page = append(page, b)
-	}
-	return page, total, nil
+	return len(f.bookings)
 }
 
 func (f *FakeStore) CreateUser(ctx context.Context, user *models.User) error {

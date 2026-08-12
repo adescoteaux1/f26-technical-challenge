@@ -1,7 +1,6 @@
-// Package portals generates the Portal Network Status panel's data for the
-// operations console: a fixed set of six portals whose containment field may
-// be down and whose load is randomized per snapshot, with status derived from
-// those two facts.
+// Package portals generates the operations console's Portal Network Status
+// panel: six fixed portals whose load is randomized, with status derived from
+// that load and from whether the containment field is up.
 package portals
 
 import (
@@ -9,8 +8,6 @@ import (
 	"time"
 )
 
-// Status values a portal can report. Always derived via StatusFor, never set
-// independently.
 const (
 	StatusNominal  = "nominal"
 	StatusUnstable = "unstable"
@@ -18,13 +15,9 @@ const (
 )
 
 const (
-	// unstableThreshold is the load at which a rift starts destabilizing —
-	// still passing traffic, but too close to its containment capacity to
-	// accept new transits reliably.
-	unstableThreshold = 80
-
-	// offlineOdds is the 1-in-N chance a portal's containment field is down.
-	offlineOdds = 8
+	maxLoad               = 100
+	unstableLoadThreshold = 80
+	offlineChanceOneIn    = 8
 )
 
 // Names are the six portals the console renders, in display order.
@@ -37,10 +30,14 @@ var Names = []string{
 	"Western Bridge",
 }
 
-// Portal is one row of the Portal Network Status panel. Online is a fact about
-// the containment field; Load is how hard the portal is being driven. An
-// online portal with no traffic is idle at 0 load, which is not the same
-// state as being offline.
+// guaranteedStatuses each get a portal reserved for them every hour, so the
+// console always has an offline chip, an unstable badge and a healthy corridor
+// to render. Left to chance, roughly one hour in seven came back all-nominal.
+var guaranteedStatuses = []string{StatusOffline, StatusUnstable, StatusNominal}
+
+// Portal is one card in the panel. Online reports the containment field, Load
+// reports traffic: an online portal carrying nothing is idle at 0 load, which
+// is a different state from being offline.
 type Portal struct {
 	Name   string
 	Online bool
@@ -48,36 +45,73 @@ type Portal struct {
 	Load   int
 }
 
-// Snapshot returns the current state of all six portals.
+// Snapshot returns all six portals. The result is stable for the whole clock
+// hour, so polling more often re-reads the same state rather than watching it
+// flicker.
 func Snapshot() []Portal {
-	return snapshot(rand.New(rand.NewSource(time.Now().UnixNano())))
+	return snapshotAt(time.Now())
+}
+
+func snapshotAt(t time.Time) []Portal {
+	return snapshot(rand.New(rand.NewSource(hourSeed(t))))
+}
+
+func hourSeed(t time.Time) int64 {
+	return t.UTC().Truncate(time.Hour).Unix()
 }
 
 func snapshot(rng *rand.Rand) []Portal {
-	out := make([]Portal, 0, len(Names))
-	for _, name := range Names {
-		online := rng.Intn(offlineOdds) != 0
-		load := 0
-		if online {
-			load = rng.Intn(100)
-		}
-		out = append(out, Portal{
+	requiredStatuses := reserveGuaranteedStatuses(rng)
+
+	snapshot := make([]Portal, 0, len(Names))
+	for i, name := range Names {
+		online, load := sampleState(rng, requiredStatuses[i])
+		snapshot = append(snapshot, Portal{
 			Name:   name,
 			Online: online,
 			Status: StatusFor(online, load),
 			Load:   load,
 		})
 	}
-	return out
+	return snapshot
 }
 
-// StatusFor derives a portal's status from whether its containment field is up
-// and how hard it is being driven.
+// reserveGuaranteedStatuses returns, per portal, the status it must report this
+// hour. Portals left empty are unconstrained.
+func reserveGuaranteedStatuses(rng *rand.Rand) []string {
+	required := make([]string, len(Names))
+	for i, portalIndex := range rng.Perm(len(Names))[:len(guaranteedStatuses)] {
+		required[portalIndex] = guaranteedStatuses[i]
+	}
+	return required
+}
+
+func sampleState(rng *rand.Rand, requiredStatus string) (online bool, load int) {
+	switch requiredStatus {
+	case StatusOffline:
+		return false, 0
+	case StatusUnstable:
+		return true, unstableLoadThreshold + rng.Intn(maxLoad-unstableLoadThreshold)
+	case StatusNominal:
+		return true, rng.Intn(unstableLoadThreshold)
+	default:
+		return sampleUnconstrainedState(rng)
+	}
+}
+
+func sampleUnconstrainedState(rng *rand.Rand) (online bool, load int) {
+	if rng.Intn(offlineChanceOneIn) == 0 {
+		return false, 0
+	}
+	return true, rng.Intn(maxLoad)
+}
+
+// StatusFor derives a portal's status; it is never assigned directly.
 func StatusFor(online bool, load int) string {
 	switch {
 	case !online:
 		return StatusOffline
-	case load >= unstableThreshold:
+	case load >= unstableLoadThreshold:
 		return StatusUnstable
 	default:
 		return StatusNominal

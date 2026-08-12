@@ -128,8 +128,9 @@ func NewRouter(s *Server) http.Handler {
 		Method:      http.MethodGet,
 		Path:        "/frontend/portals",
 		Summary:     "Portal Network Status for the operations console",
-		Description: "Returns all six portals with a randomized load percentage per request; " +
-			"status is derived from the percentage, not sent independently.",
+		Description: "Returns all six portals with a randomized load; status is derived from it, " +
+			"not sent independently. The network state is stable for the whole clock hour, so " +
+			"polling more often than that returns the same values.",
 		Tags: []string{"Frontend"},
 	}, s.portalStatusHandler)
 

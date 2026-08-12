@@ -197,13 +197,11 @@ type Booking struct {
 	Destination string
 	Portal      string
 
-	// LoadPercent is the corridor load recorded for this booking, or nil when
-	// the corridor was offline and no reading was taken.
+	// Nil when the corridor was offline and no reading was taken.
 	LoadPercent *int
 
 	Status BookingStatus
 
-	// StatusDetail is the secondary reason line ("Corridor Unstable"), empty
-	// for statuses that don't have one.
+	// Empty for statuses without a reason line; "Corridor Unstable" otherwise.
 	StatusDetail string
 }

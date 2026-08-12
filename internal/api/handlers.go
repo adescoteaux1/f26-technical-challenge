@@ -219,29 +219,30 @@ func (s *Server) bookingsHandler(ctx context.Context, input *bookingsInput) (*bo
 		cursor = parsed
 	}
 
-	// One extra row is what tells us whether another batch follows, without a
-	// second count query against the keyset window.
-	bookings, total, err := s.Store.ListBookings(ctx, cursor, input.Limit+1)
+	// The extra row is never returned: its presence is what proves another
+	// batch follows, without a second query against the keyset window.
+	withLookahead, totalOnFile, err := s.Store.ListBookings(ctx, cursor, input.Limit+1)
 	if err != nil {
 		s.Log.Error("list bookings failed", "error", err)
 		return nil, huma.Error500InternalServerError("internal error")
 	}
 
-	hasMore := len(bookings) > input.Limit
+	hasMore := len(withLookahead) > input.Limit
+	batch := withLookahead
 	if hasMore {
-		bookings = bookings[:input.Limit]
+		batch = withLookahead[:input.Limit]
 	}
 
 	page := bookingsPage{
-		Items:   make([]bookingItem, 0, len(bookings)),
+		Items:   make([]bookingItem, 0, len(batch)),
 		HasMore: hasMore,
-		Total:   total,
+		Total:   totalOnFile,
 	}
-	for _, b := range bookings {
-		page.Items = append(page.Items, toBookingItem(b))
+	for _, booking := range batch {
+		page.Items = append(page.Items, toBookingItem(booking))
 	}
 	if hasMore {
-		page.NextCursor = encodeBookingCursor(bookings[len(bookings)-1])
+		page.NextCursor = encodeBookingCursor(batch[len(batch)-1])
 	}
 
 	resp := &bookingsOutput{}

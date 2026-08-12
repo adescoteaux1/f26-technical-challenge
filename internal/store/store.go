@@ -47,9 +47,7 @@ type ExpeditionSummary struct {
 }
 
 // BookingCursor is the keyset position a booking page resumes from. Departure
-// time alone isn't unique, so the reference tie-breaks it — together they match
-// the ORDER BY, which is what keeps paging stable when rows are inserted
-// mid-scroll.
+// time alone isn't unique, so Reference tie-breaks it.
 type BookingCursor struct {
 	DepartsAt time.Time
 	Reference string

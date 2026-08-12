@@ -259,16 +259,15 @@ func (s *PostgresStore) ListExpeditionsForUser(ctx context.Context, userID strin
 	return out, rows.Err()
 }
 
-// ListBookings pages by keyset rather than OFFSET: the row comparison
-// (departs_at, reference) > (cursor) matches the ORDER BY exactly, so rows
-// inserted mid-scroll can't shift a page boundary and cause a client to skip
-// or repeat a booking.
+// ListBookings pages by keyset rather than OFFSET: the row comparison matches
+// the ORDER BY exactly, so rows inserted mid-scroll can't shift a page boundary
+// and make a client skip or repeat a booking.
 func (s *PostgresStore) ListBookings(ctx context.Context, cursor *BookingCursor, limit int) ([]models.Booking, int, error) {
-	var after *time.Time
-	var afterRef string
+	var afterDeparture *time.Time
+	var afterReference string
 	if cursor != nil {
-		after = &cursor.DepartsAt
-		afterRef = cursor.Reference
+		afterDeparture = &cursor.DepartsAt
+		afterReference = cursor.Reference
 	}
 
 	rows, err := s.pool.Query(ctx, `
@@ -277,32 +276,32 @@ func (s *PostgresStore) ListBookings(ctx context.Context, cursor *BookingCursor,
 		FROM bookings
 		WHERE $1::timestamptz IS NULL OR (departs_at, reference) > ($1::timestamptz, $2::text)
 		ORDER BY departs_at, reference
-		LIMIT $3`, after, afterRef, limit)
+		LIMIT $3`, afterDeparture, afterReference, limit)
 	if err != nil {
 		return nil, 0, err
 	}
 	defer rows.Close()
 
-	out := []models.Booking{}
+	page := []models.Booking{}
 	for rows.Next() {
-		var b models.Booking
-		if err := rows.Scan(&b.Reference, &b.DepartsAt, &b.Destination, &b.Portal,
-			&b.LoadPercent, &b.Status, &b.StatusDetail); err != nil {
+		var booking models.Booking
+		if err := rows.Scan(&booking.Reference, &booking.DepartsAt, &booking.Destination,
+			&booking.Portal, &booking.LoadPercent, &booking.Status, &booking.StatusDetail); err != nil {
 			return nil, 0, err
 		}
-		out = append(out, b)
+		page = append(page, booking)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, 0, err
 	}
 
 	// Counted separately: a window function over the keyset-filtered query
-	// would only count the rows after the cursor, not everything on file.
-	total := 0
-	if err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM bookings`).Scan(&total); err != nil {
+	// would only count rows after the cursor, not everything on file.
+	totalOnFile := 0
+	if err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM bookings`).Scan(&totalOnFile); err != nil {
 		return nil, 0, err
 	}
-	return out, total, nil
+	return page, totalOnFile, nil
 }
 
 func (s *PostgresStore) CreateUser(ctx context.Context, user *models.User) error {

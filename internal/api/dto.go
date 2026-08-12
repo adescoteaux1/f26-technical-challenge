@@ -178,9 +178,6 @@ func toBookingItem(b models.Booking) bookingItem {
 	}
 }
 
-// bookingsPage is one window of an infinite scroll: feed nextCursor back as
-// ?cursor= to append the following batch. Total is still reported so the panel
-// header can say "46 reservations on file" without walking every page.
 type bookingsPage struct {
 	Items      []bookingItem `json:"items" doc:"Bookings in this batch, soonest departure first"`
 	NextCursor string        `json:"nextCursor,omitempty" doc:"Pass as ?cursor= to fetch the next batch; omitted on the last one"`
@@ -188,27 +185,29 @@ type bookingsPage struct {
 	Total      int           `json:"total" doc:"Total bookings on file, not just in this batch"`
 }
 
-// Booking cursors are opaque on the wire so the keyset encoding stays a server
-// concern, but they're just the ORDER BY tuple: departure time and reference.
-func encodeBookingCursor(b models.Booking) string {
-	raw := b.DepartsAt.UTC().Format(time.RFC3339Nano) + "|" + b.Reference
-	return base64.RawURLEncoding.EncodeToString([]byte(raw))
+// Cursors are base64 only to keep the encoding opaque to clients; the payload
+// is just the ORDER BY tuple.
+const bookingCursorSeparator = "|"
+
+func encodeBookingCursor(booking models.Booking) string {
+	tuple := booking.DepartsAt.UTC().Format(time.RFC3339Nano) + bookingCursorSeparator + booking.Reference
+	return base64.RawURLEncoding.EncodeToString([]byte(tuple))
 }
 
 func decodeBookingCursor(encoded string) (*store.BookingCursor, error) {
-	raw, err := base64.RawURLEncoding.DecodeString(encoded)
+	tuple, err := base64.RawURLEncoding.DecodeString(encoded)
 	if err != nil {
 		return nil, fmt.Errorf("cursor is not valid base64: %w", err)
 	}
-	ts, ref, ok := strings.Cut(string(raw), "|")
-	if !ok || ref == "" {
+	departure, reference, separated := strings.Cut(string(tuple), bookingCursorSeparator)
+	if !separated || reference == "" {
 		return nil, fmt.Errorf("cursor is missing its reference half")
 	}
-	departsAt, err := time.Parse(time.RFC3339Nano, ts)
+	departsAt, err := time.Parse(time.RFC3339Nano, departure)
 	if err != nil {
 		return nil, fmt.Errorf("cursor has an unparseable timestamp: %w", err)
 	}
-	return &store.BookingCursor{DepartsAt: departsAt, Reference: ref}, nil
+	return &store.BookingCursor{DepartsAt: departsAt, Reference: reference}, nil
 }
 
 // --- Huma operation Input/Output wrappers ---

@@ -2,7 +2,9 @@ package portals
 
 import (
 	"math/rand"
+	"reflect"
 	"testing"
+	"time"
 )
 
 func TestStatusFor_DerivesFromOnlineAndLoad(t *testing.T) {
@@ -24,6 +26,29 @@ func TestStatusFor_DerivesFromOnlineAndLoad(t *testing.T) {
 		if got := StatusFor(tc.online, tc.load); got != tc.want {
 			t.Errorf("StatusFor(%t, %d) = %q, want %q", tc.online, tc.load, got, tc.want)
 		}
+	}
+}
+
+func TestSnapshot_IsStableWithinTheHourAndChangesAcrossHours(t *testing.T) {
+	hour := time.Date(2026, 8, 11, 14, 0, 0, 0, time.UTC)
+
+	first := snapshotAt(hour)
+	for _, within := range []time.Time{hour, hour.Add(time.Second), hour.Add(59 * time.Minute), hour.Add(59*time.Minute + 59*time.Second)} {
+		if got := snapshotAt(within); !reflect.DeepEqual(got, first) {
+			t.Errorf("snapshot at %s differs from the start of the same hour", within.Format(time.RFC3339))
+		}
+	}
+
+	// Across a full day, the hourly seed has to actually move the state —
+	// otherwise "updates every hour" would be indistinguishable from static.
+	distinct := 0
+	for h := range 24 {
+		if !reflect.DeepEqual(snapshotAt(hour.Add(time.Duration(h)*time.Hour)), first) {
+			distinct++
+		}
+	}
+	if distinct == 0 {
+		t.Error("every hour of the day produced an identical snapshot")
 	}
 }
 
@@ -58,17 +83,38 @@ func TestSnapshot_LoadInRangeAndStatusConsistent(t *testing.T) {
 	}
 }
 
-func TestSnapshot_ReachesEveryStatus(t *testing.T) {
-	seen := map[string]bool{}
-	for seed := range int64(200) {
+// Every snapshot must contain all three statuses, not merely reach them
+// eventually: the console needs an offline chip and an unstable badge to
+// render in any given hour.
+func TestSnapshot_AlwaysContainsEveryStatus(t *testing.T) {
+	for seed := range int64(500) {
+		seen := map[string]bool{}
 		for _, p := range snapshot(rand.New(rand.NewSource(seed))) {
 			seen[p.Status] = true
 		}
-	}
-	for _, status := range []string{StatusNominal, StatusUnstable, StatusOffline} {
-		if !seen[status] {
-			t.Errorf("no snapshot across 200 seeds produced status %q", status)
+		for _, status := range []string{StatusNominal, StatusUnstable, StatusOffline} {
+			if !seen[status] {
+				t.Fatalf("seed %d: snapshot has no %q portal (got %v)", seed, status, seen)
+			}
 		}
+	}
+}
+
+// Which portals draw which status still has to vary, or the panel would show
+// the same corridor offline forever.
+func TestSnapshot_OfflinePortalVariesAcrossHours(t *testing.T) {
+	hour := time.Date(2026, 8, 11, 0, 0, 0, 0, time.UTC)
+
+	offline := map[string]bool{}
+	for h := range 48 {
+		for _, p := range snapshotAt(hour.Add(time.Duration(h) * time.Hour)) {
+			if p.Status == StatusOffline {
+				offline[p.Name] = true
+			}
+		}
+	}
+	if len(offline) < 2 {
+		t.Errorf("across 48 hours only %d distinct portal(s) ever went offline: %v", len(offline), offline)
 	}
 }
 
