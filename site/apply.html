@@ -17,17 +17,27 @@
   <h1>Get your challenge repo</h1>
   <p>
     <strong>This step is required</strong> before you start either
-    challenge. Enter your GitHub username and we'll create a private repo
-    under our org and add you as a collaborator with push access.
+    challenge. Enter your name and GitHub username and we'll create a
+    private repo under our org, titled with your name, and add you as a
+    collaborator with push access.
     <strong>Your submission must live in this repo</strong> — don't create
     or use your own instead. Submitting the same username again is safe;
     you'll just get the same repo back.
   </p>
 
   <form id="apply-form" class="apply-form">
+    <label for="firstName">First name</label>
+    <input id="firstName" name="firstName" type="text"
+           placeholder="Jane" autocomplete="given-name" required>
+
+    <label for="lastName">Last name</label>
+    <input id="lastName" name="lastName" type="text"
+           placeholder="Doe" autocomplete="family-name" required>
+
     <label for="githubUsername">GitHub username</label>
     <input id="githubUsername" name="githubUsername" type="text"
            placeholder="octocat" autocomplete="off" required>
+
     <button type="submit">Create my repo</button>
   </form>
 
@@ -40,6 +50,8 @@
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    const firstName = document.getElementById("firstName").value.trim();
+    const lastName = document.getElementById("lastName").value.trim();
     const username = document.getElementById("githubUsername").value.trim();
 
     result.hidden = false;
@@ -50,7 +62,7 @@
       const res = await fetch("/apply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ githubUsername: username }),
+        body: JSON.stringify({ githubUsername: username, firstName, lastName }),
       });
       const data = await res.json();
 

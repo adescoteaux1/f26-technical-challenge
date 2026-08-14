@@ -45,28 +45,28 @@ func TestCreateApplicantRepo_NewRepo(t *testing.T) {
 		case r.Method == http.MethodPost && r.URL.Path == "/orgs/the-org/repos":
 			var body map[string]any
 			_ = json.NewDecoder(r.Body).Decode(&body)
-			if body["name"] != "f26-challenge-octocat" {
-				t.Errorf("repo name = %v, want f26-challenge-octocat", body["name"])
+			if body["name"] != "f26-challenge-jane-doe-octocat" {
+				t.Errorf("repo name = %v, want f26-challenge-jane-doe-octocat", body["name"])
 			}
 			if body["private"] != true {
 				t.Errorf("private = %v, want true", body["private"])
 			}
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(map[string]string{
-				"html_url": "https://github.com/the-org/f26-challenge-octocat",
+				"html_url": "https://github.com/the-org/f26-challenge-jane-doe-octocat",
 			})
-		case r.Method == http.MethodPut && r.URL.Path == "/repos/the-org/f26-challenge-octocat/collaborators/octocat":
+		case r.Method == http.MethodPut && r.URL.Path == "/repos/the-org/f26-challenge-jane-doe-octocat/collaborators/octocat":
 			w.WriteHeader(http.StatusCreated)
 		default:
 			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
 		}
 	})
 
-	repoURL, err := client.CreateApplicantRepo(context.Background(), "octocat")
+	repoURL, err := client.CreateApplicantRepo(context.Background(), "octocat", "Jane", "Doe")
 	if err != nil {
 		t.Fatalf("CreateApplicantRepo() error = %v", err)
 	}
-	if repoURL != "https://github.com/the-org/f26-challenge-octocat" {
+	if repoURL != "https://github.com/the-org/f26-challenge-jane-doe-octocat" {
 		t.Errorf("repoURL = %q", repoURL)
 	}
 }
@@ -76,10 +76,10 @@ func TestCreateApplicantRepo_ReusesExistingRepo(t *testing.T) {
 		switch {
 		case r.Method == http.MethodPost && r.URL.Path == "/orgs/the-org/repos":
 			w.WriteHeader(http.StatusUnprocessableEntity)
-		case r.Method == http.MethodGet && r.URL.Path == "/repos/the-org/f26-challenge-octocat":
+		case r.Method == http.MethodGet && r.URL.Path == "/repos/the-org/f26-challenge-jane-doe-octocat":
 			w.WriteHeader(http.StatusOK)
 			_ = json.NewEncoder(w).Encode(map[string]string{
-				"html_url": "https://github.com/the-org/f26-challenge-octocat",
+				"html_url": "https://github.com/the-org/f26-challenge-jane-doe-octocat",
 			})
 		case r.Method == http.MethodPut:
 			w.WriteHeader(http.StatusNoContent)
@@ -88,11 +88,11 @@ func TestCreateApplicantRepo_ReusesExistingRepo(t *testing.T) {
 		}
 	})
 
-	repoURL, err := client.CreateApplicantRepo(context.Background(), "octocat")
+	repoURL, err := client.CreateApplicantRepo(context.Background(), "octocat", "Jane", "Doe")
 	if err != nil {
 		t.Fatalf("CreateApplicantRepo() error = %v", err)
 	}
-	if repoURL != "https://github.com/the-org/f26-challenge-octocat" {
+	if repoURL != "https://github.com/the-org/f26-challenge-jane-doe-octocat" {
 		t.Errorf("repoURL = %q", repoURL)
 	}
 }
@@ -103,14 +103,14 @@ func TestCreateApplicantRepo_UnknownGitHubUser(t *testing.T) {
 		case http.MethodPost:
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(map[string]string{
-				"html_url": "https://github.com/the-org/f26-challenge-ghost",
+				"html_url": "https://github.com/the-org/f26-challenge-ghost-ghost",
 			})
 		case http.MethodPut:
 			w.WriteHeader(http.StatusNotFound)
 		}
 	})
 
-	_, err := client.CreateApplicantRepo(context.Background(), "ghost")
+	_, err := client.CreateApplicantRepo(context.Background(), "ghost", "Ghost", "Ghost")
 	if err != ErrUserNotFound {
 		t.Fatalf("CreateApplicantRepo() error = %v, want ErrUserNotFound", err)
 	}
@@ -118,8 +118,41 @@ func TestCreateApplicantRepo_UnknownGitHubUser(t *testing.T) {
 
 func TestCreateApplicantRepo_InvalidUsername(t *testing.T) {
 	client := NewClient("token", "the-org")
-	_, err := client.CreateApplicantRepo(context.Background(), "-not-valid-")
+	_, err := client.CreateApplicantRepo(context.Background(), "-not-valid-", "Jane", "Doe")
 	if err != ErrInvalidUsername {
 		t.Fatalf("CreateApplicantRepo() error = %v, want ErrInvalidUsername", err)
+	}
+}
+
+func TestCreateApplicantRepo_MissingName(t *testing.T) {
+	client := NewClient("token", "the-org")
+
+	cases := []struct{ first, last string }{
+		{"", "Doe"},
+		{"Jane", ""},
+		{"---", "Doe"},
+	}
+	for _, c := range cases {
+		_, err := client.CreateApplicantRepo(context.Background(), "octocat", c.first, c.last)
+		if err != ErrMissingName {
+			t.Errorf("CreateApplicantRepo(%q, %q) error = %v, want ErrMissingName", c.first, c.last, err)
+		}
+	}
+}
+
+func TestSlugify(t *testing.T) {
+	cases := map[string]string{
+		"Jane":      "jane",
+		"Mary Jane": "mary-jane",
+		"O'Brien":   "o-brien",
+		"  Doe  ":   "doe",
+		"Jean-Luc":  "jean-luc",
+		"---":       "",
+		"":          "",
+	}
+	for input, want := range cases {
+		if got := slugify(input); got != want {
+			t.Errorf("slugify(%q) = %q, want %q", input, got, want)
+		}
 	}
 }

@@ -131,10 +131,13 @@ func toFinishedResponse(row *store.ExpeditionRow) expeditionStateResponse {
 }
 
 // applyRequest / applyResponse back POST /apply: an applicant gives their
-// GitHub username and gets a private repo under the org, with push access,
-// instead of having to create and share their own.
+// name and GitHub username and gets a private repo under the org, titled
+// with their name (plus their username, to guarantee uniqueness even if two
+// applicants share a name), with push access already granted.
 type applyRequest struct {
 	GitHubUsername string `json:"githubUsername" minLength:"1" doc:"Your GitHub username (not email or display name)"`
+	FirstName      string `json:"firstName" minLength:"1" doc:"Your first name, used to title your repo"`
+	LastName       string `json:"lastName" minLength:"1" doc:"Your last name, used to title your repo"`
 }
 
 type applyResponse struct {

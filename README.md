@@ -11,12 +11,14 @@ infrastructure a scheduler is built against.
 ## Get your challenge repo first
 
 **Applicants: do this before writing any code.** Go to `/apply` (or
-`POST /apply` with `{"githubUsername": "..."}`) and enter your GitHub
-username. **Your submission must live in the repo this creates for
-you** (`<org>/f26-challenge-<username>`, with push access already granted) —
-don't create your own repo instead; work that ends up anywhere else isn't
-reviewed. Submitting the same username again is safe, it just hands back
-the same repo.
+`POST /apply` with `{"githubUsername": "...", "firstName": "...", "lastName": "..."}`)
+and enter your name and GitHub username. **Your submission must live in the
+repo this creates for you** (`<org>/f26-challenge-<first>-<last>-<username>`,
+titled with your name, with push access already granted) — don't create
+your own repo instead; work that ends up anywhere else isn't reviewed.
+Submitting the same username again is safe, it just hands back the same
+repo. The username is appended to the repo name (not just the name) so two
+applicants who happen to share a name never collide.
 
 **Whoever stands up this server:** `/apply` needs `GITHUB_TOKEN` (create
 repos + manage collaborators in the org) and `GITHUB_ORG` set — see
@@ -29,8 +31,8 @@ applicants. The token's identity needs at least "Create repository" and
 ```bash
 curl -X POST localhost:8080/apply \
   -H 'Content-Type: application/json' \
-  -d '{"githubUsername": "octocat"}'
-# {"repoUrl":"https://github.com/<org>/f26-challenge-octocat"}
+  -d '{"githubUsername": "octocat", "firstName": "Jane", "lastName": "Doe"}'
+# {"repoUrl":"https://github.com/<org>/f26-challenge-jane-doe-octocat"}
 ```
 
 This endpoint intentionally has no auth and no rate limiting beyond

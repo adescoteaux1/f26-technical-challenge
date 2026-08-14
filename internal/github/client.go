@@ -13,11 +13,13 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"strings"
 )
 
 var (
 	ErrInvalidUsername = errors.New("invalid GitHub username")
 	ErrUserNotFound    = errors.New("GitHub user not found")
+	ErrMissingName     = errors.New("first and last name are required")
 )
 
 // apiBaseURL is overridden in tests to point at a fake GitHub server.
@@ -29,6 +31,18 @@ var usernamePattern = regexp.MustCompile(`^[a-zA-Z\d](?:[a-zA-Z\d]|-(?:[a-zA-Z\d
 
 func ValidUsername(username string) bool {
 	return usernamePattern.MatchString(username)
+}
+
+// nonSlugChars matches runs of characters that don't belong in a repo-name
+// slug, so they collapse to a single hyphen instead of one per character.
+var nonSlugChars = regexp.MustCompile(`[^a-z0-9]+`)
+
+// slugify lowercases s and replaces anything that isn't a letter or digit
+// with a single hyphen, trimming leading/trailing hyphens. Returns "" if
+// nothing alphanumeric survives.
+func slugify(s string) string {
+	slug := nonSlugChars.ReplaceAllString(strings.ToLower(strings.TrimSpace(s)), "-")
+	return strings.Trim(slug, "-")
 }
 
 // Client talks to the GitHub REST API as whatever identity Token belongs to.
@@ -44,15 +58,22 @@ func NewClient(token, org string) *Client {
 	return &Client{Token: token, Org: org, HTTPClient: http.DefaultClient}
 }
 
-// CreateApplicantRepo creates a private repo under c.Org named for username
-// (reusing it if this applicant already has one), invites username as a push
-// collaborator, and returns the repo's HTML URL.
-func (c *Client) CreateApplicantRepo(ctx context.Context, username string) (string, error) {
+// CreateApplicantRepo creates a private repo under c.Org titled with the
+// applicant's name (reusing it if this exact applicant already has one),
+// invites username as a push collaborator, and returns the repo's HTML URL.
+// The username suffix guarantees the repo name is unique even when two
+// applicants share a name — usernames never collide, names sometimes do.
+func (c *Client) CreateApplicantRepo(ctx context.Context, username, firstName, lastName string) (string, error) {
 	if !ValidUsername(username) {
 		return "", ErrInvalidUsername
 	}
 
-	repoName := "f26-challenge-" + username
+	firstSlug, lastSlug := slugify(firstName), slugify(lastName)
+	if firstSlug == "" || lastSlug == "" {
+		return "", ErrMissingName
+	}
+
+	repoName := fmt.Sprintf("f26-challenge-%s-%s-%s", firstSlug, lastSlug, username)
 	repoURL, err := c.createOrGetRepo(ctx, repoName)
 	if err != nil {
 		return "", err

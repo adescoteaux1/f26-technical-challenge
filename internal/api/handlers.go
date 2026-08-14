@@ -24,7 +24,7 @@ import (
 // applicantRepoProvisioner is the subset of *github.Client that POST /apply
 // needs, so handler tests can supply a fake instead of hitting real GitHub.
 type applicantRepoProvisioner interface {
-	CreateApplicantRepo(ctx context.Context, username string) (string, error)
+	CreateApplicantRepo(ctx context.Context, username, firstName, lastName string) (string, error)
 }
 
 // Server holds the dependencies operation handlers need.
@@ -185,11 +185,15 @@ func (s *Server) applyHandler(ctx context.Context, input *applyInput) (*applyOut
 	}
 
 	username := strings.TrimSpace(input.Body.GitHubUsername)
-	repoURL, err := s.GitHub.CreateApplicantRepo(ctx, username)
+	firstName := strings.TrimSpace(input.Body.FirstName)
+	lastName := strings.TrimSpace(input.Body.LastName)
+	repoURL, err := s.GitHub.CreateApplicantRepo(ctx, username, firstName, lastName)
 	if err != nil {
 		switch {
 		case errors.Is(err, ghub.ErrInvalidUsername):
 			return nil, huma.Error422UnprocessableEntity("that doesn't look like a valid GitHub username")
+		case errors.Is(err, ghub.ErrMissingName):
+			return nil, huma.Error422UnprocessableEntity("first and last name are required")
 		case errors.Is(err, ghub.ErrUserNotFound):
 			return nil, huma.Error404NotFound("no GitHub user with that username exists")
 		default:

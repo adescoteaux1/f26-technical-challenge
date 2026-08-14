@@ -11,7 +11,7 @@ recently.
 
 **Finding a candidate's repo:** `CHALLENGE.md` §0 requires applicants to get
 their repo via `/apply` rather than create their own — it'll be under the
-org as `f26-challenge-<their-github-username>`, not wherever they might tell
+org as `f26-challenge-<their-name>-<their-github-username>`, not wherever they might tell
 you. If someone points you at a different repo, that's worth a question on
 its own.
 

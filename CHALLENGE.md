@@ -18,7 +18,7 @@ Questions? Reach out to Ally (<descoteaux.a@northeastern.edu>).
 
 ## 0. Get your challenge repo — do this before anything else
 
-Go to `<CONTROL_TOWER_BASE_URL>/apply` and enter your GitHub username. This
+Go to `<CONTROL_TOWER_BASE_URL>/apply` and enter your name and GitHub username. This
 creates a private repo for you under our org and adds you as a collaborator
 with push access.
 
