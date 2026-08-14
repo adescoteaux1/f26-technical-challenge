@@ -153,6 +153,7 @@ a:hover { text-decoration: underline; }
 .card-cta { font-family: var(--font-mono); font-size: 0.85rem; color: var(--accent); }
 
 .landing-footer { color: var(--text-dim); font-size: 0.9rem; }
+.landing-footer .contact-note { margin: 0 0 0.5rem; }
 
 /* --- Challenge spec page --- */
 

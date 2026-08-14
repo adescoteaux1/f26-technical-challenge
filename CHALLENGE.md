@@ -12,6 +12,8 @@ simulates the network, and scores how you did.
 any architecture, any project structure. The only hard requirement is that
 your program speaks HTTP/JSON to the Control Tower correctly.
 
+Questions? Reach out to Ally (<descoteaux.a@northeastern.edu>).
+
 ---
 
 ## 0. Get your challenge repo — do this before anything else

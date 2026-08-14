@@ -26,6 +26,8 @@ approach, any state management, any build tooling, or none of it. The only
 hard requirement is that your app talks to the Control Tower's HTTP/JSON
 endpoints and runs from a single documented command.
 
+Questions? Reach out to Dao (<ho.dao@northeastern.edu>).
+
 ---
 
 ## 0. Get your challenge repo before anything else
