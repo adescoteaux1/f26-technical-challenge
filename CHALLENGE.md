@@ -14,11 +14,15 @@ your program speaks HTTP/JSON to the Control Tower correctly.
 
 Questions? Reach out to Ally (<descoteaux.a@northeastern.edu>).
 
+**Base URL: `https://fall26-challenge.generatenu.com`.** Every URL in this
+doc is relative to it — that's the actual address your scheduler needs to
+talk to.
+
 ---
 
 ## 0. Get your challenge repo — do this before anything else
 
-Go to `<CONTROL_TOWER_BASE_URL>/apply` and enter your name and GitHub username. This
+Go to `https://fall26-challenge.generatenu.com/apply` and enter your name and GitHub username. This
 creates a private repo for you under our org and adds you as a collaborator
 with push access.
 
@@ -68,7 +72,7 @@ and pushing hard on one usually costs you on another.
 Register once:
 
 ```bash
-curl -X POST <CONTROL_TOWER_BASE_URL>/register \
+curl -X POST https://fall26-challenge.generatenu.com/register \
   -H 'Content-Type: application/json' \
   -d '{"email": "you@example.com", "nuid": "001234567"}'
 ```
@@ -90,7 +94,7 @@ Everything you run is tied to your account, and you can look back at your
 own history any time:
 
 ```bash
-curl <CONTROL_TOWER_BASE_URL>/me/expeditions -H "Authorization: Bearer $TOKEN"
+curl https://fall26-challenge.generatenu.com/me/expeditions -H "Authorization: Bearer $TOKEN"
 ```
 
 Run as many expeditions as you want while you iterate. Only your final
@@ -342,7 +346,7 @@ problem (largely via `DESIGN.md` and, where it's visible, your
 commit/expedition history), and your final scores.
 
 1. **A working scheduler** that runs one or more full expeditions against
-   the Control Tower end to end.
+   the Control Tower (`https://fall26-challenge.generatenu.com`) end to end.
 2. **`README.md`** — setup, how to run it, dependencies, project layout.
    Assume the reader has never seen your project before.
 3. **`DESIGN.md`** (max 2 pages) — not a tour of every class, but how you

@@ -8,17 +8,25 @@ multiple independent cycles per expedition.
 It does **not** include a scheduler client — this repo is the grading
 infrastructure a scheduler is built against.
 
+**Live deployment: `https://fall26-challenge.generatenu.com`.** This is the
+one instance applicants' schedulers actually talk to; expeditions run
+against it are what get scored. Everything below (`localhost:8080` curl
+examples, `go run ./cmd/controltower`, etc.) is about running your own copy
+of the server for local development of the Control Tower itself, not
+something applicants do.
+
 ## Get your challenge repo first
 
-**Applicants: do this before writing any code.** Go to `/apply` (or
-`POST /apply` with `{"githubUsername": "...", "firstName": "...", "lastName": "..."}`)
-and enter your name and GitHub username. **Your submission must live in the
-repo this creates for you** (`<org>/f26-challenge-<first>-<last>-<username>`,
-titled with your name, with push access already granted) — don't create
-your own repo instead; work that ends up anywhere else isn't reviewed.
-Submitting the same username again is safe, it just hands back the same
-repo. The username is appended to the repo name (not just the name) so two
-applicants who happen to share a name never collide.
+**Applicants: do this before writing any code.** Go to `/apply` on the live
+deployment above (or `POST /apply` with
+`{"githubUsername": "...", "firstName": "...", "lastName": "..."}`) and enter
+your name and GitHub username. **Your submission must live in the repo this
+creates for you** (`<org>/f26-challenge-<first>-<last>-<username>`, titled
+with your name, with push access already granted) — don't create your own
+repo instead; work that ends up anywhere else isn't reviewed. Submitting the
+same username again is safe, it just hands back the same repo. The username
+is appended to the repo name (not just the name) so two applicants who
+happen to share a name never collide.
 
 **Whoever stands up this server:** `/apply` needs `GITHUB_TOKEN` (create
 repos + manage collaborators in the org) and `GITHUB_ORG` set — see

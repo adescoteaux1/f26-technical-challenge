@@ -32,7 +32,7 @@ Questions? Reach out to Dao (<ho.dao@northeastern.edu>).
 
 ## 0. Get your challenge repo before anything else
 
-Go to `<CONTROL_TOWER_BASE_URL>/apply` and enter your name and GitHub username. This
+Go to `https://fall26-challenge.generatenu.com/apply` and enter your name and GitHub username. This
 creates a private repo for you under our org and adds you as a collaborator
 with push access.
 
@@ -93,14 +93,14 @@ decides whether the traveler in front of you finds out.
 
 ## 3. Talking to the Control Tower
 
-Base URL: `<CONTROL_TOWER_BASE_URL>`
+Base URL: `https://fall26-challenge.generatenu.com`
 
 **No authentication.** None of the endpoints in this challenge need a token
 or a login. Ignore the `/register` and `/login` endpoints you'll see in the
 API reference; those belong to the backend challenge.
 
-**Interactive API reference:** `<CONTROL_TOWER_BASE_URL>/docs`
-**Machine-readable spec:** `<CONTROL_TOWER_BASE_URL>/openapi.json`
+**Interactive API reference:** `https://fall26-challenge.generatenu.com/docs`
+**Machine-readable spec:** `https://fall26-challenge.generatenu.com/openapi.json`
 
 The OpenAPI spec is generated from the server's own types, so it is always
 accurate. You're welcome to generate a typed client from it rather than
