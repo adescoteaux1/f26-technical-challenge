@@ -144,6 +144,17 @@ type applyResponse struct {
 	RepoURL string `json:"repoUrl" doc:"URL of your challenge repo; you now have push access to it"`
 }
 
+// adminLookupResponse backs GET /admin/lookup: an interviewer's way to pull
+// up a candidate's submission history by user ID or email, since /me/expeditions
+// only returns the caller's own history.
+type adminLookupResponse struct {
+	UserID      string        `json:"userId" doc:"The user's account ID"`
+	Email       string        `json:"email" doc:"The user's registered email"`
+	NUID        string        `json:"nuid" doc:"The user's registered NUID"`
+	CreatedAt   time.Time     `json:"createdAt" doc:"When this account was registered"`
+	Expeditions []historyItem `json:"expeditions" doc:"This user's expedition history, newest first"`
+}
+
 // portalStatusItem is one row of the console's Portal Network Status panel.
 type portalStatusItem struct {
 	Name   string `json:"name" doc:"Portal display name"`
@@ -333,6 +344,19 @@ type applyInput struct {
 
 type applyOutput struct {
 	Body applyResponse
+}
+
+// adminLookupInput takes the admin secret as a header (not a bearer
+// token — this isn't a user account) and at least one of id/email as query
+// params. If both are given, id takes precedence.
+type adminLookupInput struct {
+	AdminToken string `header:"X-Admin-Token" doc:"Shared admin secret; see ADMIN_TOKEN in .env.example"`
+	ID         string `query:"id" doc:"User ID to look up (takes precedence over email if both are given)"`
+	Email      string `query:"email" doc:"Email to look up"`
+}
+
+type adminLookupOutput struct {
+	Body adminLookupResponse
 }
 
 type portalStatusInput struct{}

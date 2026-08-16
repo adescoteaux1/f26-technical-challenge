@@ -252,6 +252,18 @@ func (f *FakeStore) GetUserByEmail(ctx context.Context, email string) (*models.U
 	return nil, store.ErrNotFound
 }
 
+func (f *FakeStore) GetUserByID(ctx context.Context, id string) (*models.User, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	u, ok := f.users[id]
+	if !ok {
+		return nil, store.ErrNotFound
+	}
+	copyUser := u
+	return &copyUser, nil
+}
+
 func (f *FakeStore) GetUserByToken(ctx context.Context, token string) (*models.User, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

@@ -120,6 +120,33 @@ the old one). Tokens are opaque, random, and looked up directly against the
 `users` table — there's no JWT/session/expiry machinery, which is enough for
 a service whose only clients are scheduler programs, not browsers.
 
+## Looking up a candidate's history
+
+`GET /admin/lookup?id=<userId>` or `?email=<email>` returns a user's
+registration info plus their full expedition history — the same shape as
+`/me/expeditions`, but for interviewers, since that endpoint only returns
+the caller's own history via their own bearer token. It's gated by a
+separate shared secret, sent as the `X-Admin-Token` header, not a user
+bearer token (there's no "admin user" account this belongs to). Needs
+`ADMIN_TOKEN` set — see `.env.example`; without it the endpoint returns
+`503` and the rest of the server runs normally.
+
+```bash
+curl https://fall26-challenge.generatenu.com/admin/lookup?email=candidate@example.com \
+  -H "X-Admin-Token: $ADMIN_TOKEN"
+```
+
+Or use `cmd/lookup`, a small CLI wrapper that formats the result:
+
+```bash
+go run ./cmd/lookup --email=candidate@example.com --token=$ADMIN_TOKEN
+# or: go run ./cmd/lookup --id=<userId> --token=$ADMIN_TOKEN
+```
+
+`--base-url` defaults to the live deployment above; `--token` falls back to
+the `ADMIN_TOKEN` env var if not passed explicitly. If both `--id` and
+`--email` are given, `--id` takes precedence.
+
 ## Site pages
 
 The Control Tower also serves a small static site (`site/`, plus `internal/api/pages.go`)
@@ -213,6 +240,8 @@ tick's applied decisions.
 
 ```
 cmd/controltower/      entrypoint: config, DB connection, HTTP server, graceful shutdown
+cmd/lookup/            CLI wrapper around GET /admin/lookup, for pulling up a candidate's
+                       history by user ID or email without a raw curl/jq one-liner
 internal/
   models/              core domain types (Voyage, Gate, Cycle, Expedition, User) — no logic
   generator/           Workload Generator: 6 workload profiles, DAG-respecting voyage generation

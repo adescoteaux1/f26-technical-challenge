@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -15,6 +16,7 @@ import (
 	"github.com/google/uuid"
 
 	ghub "github.com/adescoteaux1/generate-control-tower/internal/github"
+	"github.com/adescoteaux1/generate-control-tower/internal/models"
 	"github.com/adescoteaux1/generate-control-tower/internal/portals"
 	"github.com/adescoteaux1/generate-control-tower/internal/slots"
 	"github.com/adescoteaux1/generate-control-tower/internal/store"
@@ -36,6 +38,11 @@ type Server struct {
 	// case POST /apply reports itself unavailable rather than the whole
 	// server failing to start over an optional feature.
 	GitHub applicantRepoProvisioner
+
+	// AdminToken gates GET /admin/lookup. Empty when ADMIN_TOKEN isn't
+	// configured, in which case that endpoint reports itself unavailable
+	// rather than the whole server failing to start over an optional feature.
+	AdminToken string
 }
 
 func (s *Server) registerHandler(ctx context.Context, input *registerInput) (*authOutput, error) {
@@ -204,6 +211,58 @@ func (s *Server) applyHandler(ctx context.Context, input *applyInput) (*applyOut
 
 	resp := &applyOutput{}
 	resp.Body = applyResponse{RepoURL: repoURL}
+	return resp, nil
+}
+
+// adminLookupHandler looks up a candidate's submission history by user ID or
+// email — for interviewers, since /me/expeditions only returns the caller's
+// own history via their own bearer token. Gated by a separate shared secret
+// (X-Admin-Token) rather than the per-user bearer scheme, since there's no
+// "admin user" account this belongs to.
+func (s *Server) adminLookupHandler(ctx context.Context, input *adminLookupInput) (*adminLookupOutput, error) {
+	if s.AdminToken == "" {
+		return nil, huma.Error503ServiceUnavailable("admin lookup isn't configured on this server yet")
+	}
+	if subtle.ConstantTimeCompare([]byte(input.AdminToken), []byte(s.AdminToken)) != 1 {
+		return nil, huma.Error401Unauthorized("invalid admin token")
+	}
+
+	id := strings.TrimSpace(input.ID)
+	email := strings.TrimSpace(input.Email)
+	if id == "" && email == "" {
+		return nil, huma.Error422UnprocessableEntity("provide at least one of id or email")
+	}
+
+	var user *models.User
+	var err error
+	if id != "" {
+		user, err = s.Store.GetUserByID(ctx, id)
+	} else {
+		user, err = s.Store.GetUserByEmail(ctx, email)
+	}
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, huma.Error404NotFound("no user found for that id/email")
+		}
+		s.Log.Error("admin lookup failed", "error", err)
+		return nil, huma.Error500InternalServerError("internal error")
+	}
+
+	summaries, err := s.Store.ListExpeditionsForUser(ctx, user.ID)
+	if err != nil {
+		s.Log.Error("admin lookup: list expeditions failed", "error", err)
+		return nil, huma.Error500InternalServerError("internal error")
+	}
+
+	resp := &adminLookupOutput{}
+	resp.Body.UserID = user.ID
+	resp.Body.Email = user.Email
+	resp.Body.NUID = user.NUID
+	resp.Body.CreatedAt = user.CreatedAt
+	resp.Body.Expeditions = make([]historyItem, 0, len(summaries))
+	for _, sum := range summaries {
+		resp.Body.Expeditions = append(resp.Body.Expeditions, toHistoryItem(sum))
+	}
 	return resp, nil
 }
 

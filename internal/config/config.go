@@ -20,6 +20,12 @@ type Config struct {
 	// unconfigured rather than the whole server failing to start.
 	GitHubToken string
 	GitHubOrg   string
+
+	// AdminToken gates GET /admin/lookup (search a candidate's submission
+	// history by user ID or email). Unset by default, in which case the
+	// endpoint reports itself unconfigured rather than the whole server
+	// failing to start.
+	AdminToken string
 }
 
 // Load reads .env (if it exists) then required environment variables.
@@ -41,5 +47,6 @@ func Load() (*Config, error) {
 		DatabaseURL: dbURL,
 		GitHubToken: os.Getenv("GITHUB_TOKEN"),
 		GitHubOrg:   os.Getenv("GITHUB_ORG"),
+		AdminToken:  os.Getenv("ADMIN_TOKEN"),
 	}, nil
 }

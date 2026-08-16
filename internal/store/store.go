@@ -92,6 +92,9 @@ type Store interface {
 	// GetUserByEmail looks up a user for login (email + NUID verification).
 	GetUserByEmail(ctx context.Context, email string) (*models.User, error)
 
+	// GetUserByID looks up a user by their ID, e.g. for admin lookup.
+	GetUserByID(ctx context.Context, id string) (*models.User, error)
+
 	// GetUserByToken looks up the caller for an authenticated request.
 	GetUserByToken(ctx context.Context, token string) (*models.User, error)
 

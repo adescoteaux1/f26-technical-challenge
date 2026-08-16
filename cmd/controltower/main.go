@@ -41,6 +41,11 @@ func main() {
 	} else {
 		logger.Warn("GITHUB_TOKEN/GITHUB_ORG not set — POST /apply will report itself unavailable")
 	}
+	if cfg.AdminToken != "" {
+		server.AdminToken = cfg.AdminToken
+	} else {
+		logger.Warn("ADMIN_TOKEN not set — GET /admin/lookup will report itself unavailable")
+	}
 
 	httpServer := &http.Server{
 		Addr:    ":" + cfg.Port,

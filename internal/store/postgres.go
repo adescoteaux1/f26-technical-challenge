@@ -321,6 +321,10 @@ func (s *PostgresStore) GetUserByEmail(ctx context.Context, email string) (*mode
 	return s.scanUser(ctx, `SELECT id, email, nuid, token, created_at FROM users WHERE email = $1`, email)
 }
 
+func (s *PostgresStore) GetUserByID(ctx context.Context, id string) (*models.User, error) {
+	return s.scanUser(ctx, `SELECT id, email, nuid, token, created_at FROM users WHERE id = $1`, id)
+}
+
 func (s *PostgresStore) GetUserByToken(ctx context.Context, token string) (*models.User, error) {
 	return s.scanUser(ctx, `SELECT id, email, nuid, token, created_at FROM users WHERE token = $1`, token)
 }

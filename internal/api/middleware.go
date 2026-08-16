@@ -21,6 +21,7 @@ var publicOperations = map[string]bool{
 	"register":              true,
 	"login":                 true,
 	"apply":                 true,
+	"admin-lookup":          true,
 	"portal-network-status": true,
 	"list-bookings":         true,
 	"list-transit-slots":    true,

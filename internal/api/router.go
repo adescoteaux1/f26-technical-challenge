@@ -113,6 +113,17 @@ func NewRouter(s *Server) http.Handler {
 	}, s.applyHandler)
 
 	huma.Register(api, huma.Operation{
+		OperationID: "admin-lookup",
+		Method:      http.MethodGet,
+		Path:        "/admin/lookup",
+		Summary:     "Look up a candidate's submission history",
+		Description: "Search by user ID and/or email (id takes precedence if both are given). " +
+			"Gated by the X-Admin-Token header, not a user bearer token — there's no user account " +
+			"this belongs to. Returns 503 if ADMIN_TOKEN isn't configured on this server.",
+		Tags: []string{"Admin"},
+	}, s.adminLookupHandler)
+
+	huma.Register(api, huma.Operation{
 		OperationID: "chaos-probe",
 		Method:      http.MethodGet,
 		Path:        "/chaos/probe",
