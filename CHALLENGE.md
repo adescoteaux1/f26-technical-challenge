@@ -18,6 +18,14 @@ Questions? Reach out to Ally (<descoteaux.a@northeastern.edu>).
 doc is relative to it — that's the actual address your scheduler needs to
 talk to.
 
+**Before your interview, you must have run at least one expedition all the
+way to a score.** Keep polling and scheduling until a response comes back
+with `"finished": true` and an `overallScore` (§4) — that's what shows up
+under `GET /me/expeditions`, and it's what we look at. Code that looks
+finished but has never actually completed a scored run isn't enough; leave
+yourself time before the interview to let a full 16-cycle expedition run
+end to end.
+
 ---
 
 ## 0. Get your challenge repo — do this before anything else
@@ -344,6 +352,10 @@ repo or submit from anywhere else — that repo is the submission: we're
 evaluating your code quality, how you iterated and worked through the
 problem (largely via `DESIGN.md` and, where it's visible, your
 commit/expedition history), and your final scores.
+
+**You need at least one finished, scored expedition before your interview**
+(see the note near the top of this doc) — a repo with code but no completed
+run isn't a finished submission.
 
 1. **A working scheduler** that runs one or more full expeditions against
    the Control Tower (`https://fall26-challenge.generatenu.com`) end to end.
