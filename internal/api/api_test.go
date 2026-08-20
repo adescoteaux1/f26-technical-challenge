@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"compress/gzip"
 	"encoding/base64"
 	"encoding/json"
 	"io"
@@ -814,5 +815,104 @@ func TestLogin_RejectsUnknownUser(t *testing.T) {
 	})
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("expected 401 for unknown user, got %d", resp.StatusCode)
+	}
+}
+
+// rawGet requests url without the default transport's transparent gzip, so the
+// test sees what actually goes over the wire.
+func rawGet(t *testing.T, url, acceptEncoding string) (*http.Response, []byte) {
+	t.Helper()
+
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	req.Header.Set("Accept-Encoding", acceptEncoding)
+
+	tr := &http.Transport{DisableCompression: true}
+	defer tr.CloseIdleConnections()
+	resp, err := tr.RoundTrip(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	return resp, body
+}
+
+// Compression carries almost all of this server's egress budget, and the
+// content types are configured explicitly in NewRouter — so a type that drops
+// off that list (or an image that lands on it) is a silent regression.
+func TestCompression_AppliesToPayloadsButNotImages(t *testing.T) {
+	srv := newTestServer()
+	defer srv.Close()
+
+	compressed := []string{"/", "/challenge", "/style.css", "/frontend/portals", "/openapi.json", "/openapi.yaml"}
+	for _, path := range compressed {
+		resp, body := rawGet(t, srv.URL+path, "gzip")
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("%s: expected 200, got %d", path, resp.StatusCode)
+			continue
+		}
+		if enc := resp.Header.Get("Content-Encoding"); enc != "gzip" {
+			t.Errorf("%s: expected gzip encoding, got %q — is its content type still in "+
+				"the Compress allowlist?", path, enc)
+			continue
+		}
+		if vary := resp.Header.Get("Vary"); !strings.Contains(vary, "Accept-Encoding") {
+			t.Errorf("%s: expected Vary to cover Accept-Encoding, got %q", path, vary)
+		}
+
+		zr, err := gzip.NewReader(bytes.NewReader(body))
+		if err != nil {
+			t.Errorf("%s: body is not valid gzip: %v", path, err)
+			continue
+		}
+		plain, err := io.ReadAll(zr)
+		if err != nil {
+			t.Errorf("%s: gzip body is truncated: %v", path, err)
+			continue
+		}
+		if len(plain) <= len(body) {
+			t.Errorf("%s: compression gained nothing: %d bytes on the wire for %d bytes of payload",
+				path, len(body), len(plain))
+		}
+	}
+
+	// Already-compressed formats grow when gzipped, so they stay off the list.
+	resp, body := rawGet(t, srv.URL+"/site/assets/dashboard.png", "gzip")
+	if enc := resp.Header.Get("Content-Encoding"); enc != "" {
+		t.Errorf("expected the PNG to be served uncompressed, got Content-Encoding %q", enc)
+	}
+	if !strings.HasPrefix(string(body), "\x89PNG") {
+		t.Error("PNG body did not arrive as a PNG")
+	}
+}
+
+// A client that doesn't advertise gzip has to keep getting plain JSON: the
+// challenge spec promises an unencoded body, and compression is opt-in per
+// request via Accept-Encoding.
+func TestCompression_SkippedWhenClientDoesNotAcceptIt(t *testing.T) {
+	srv := newTestServer()
+	defer srv.Close()
+
+	resp, body := rawGet(t, srv.URL+"/frontend/portals", "identity")
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if enc := resp.Header.Get("Content-Encoding"); enc != "" {
+		t.Errorf("expected an unencoded body, got Content-Encoding %q", enc)
+	}
+	var portalList []portalStatusItem
+	if err := json.Unmarshal(body, &portalList); err != nil {
+		t.Fatalf("body is not plain JSON: %v", err)
+	}
+	if len(portalList) == 0 {
+		t.Error("expected the portal list to be populated")
 	}
 }
