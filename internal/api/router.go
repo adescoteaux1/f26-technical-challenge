@@ -18,6 +18,14 @@ func NewRouter(s *Server) http.Handler {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
+	// A mid-cycle surge_arrivals state response is ~240KB of JSON that gzips
+	// to ~12KB, once per tick for 300+ ticks. The explicit type list replaces
+	// chi's default allowlist rather than extending it, so the OpenAPI and
+	// huma error types have to be named or they'd be missed; image/png is
+	// omitted on purpose, since gzipping the design exports grows them.
+	r.Use(middleware.Compress(5, "text/*", "application/json",
+		"application/openapi+json", "application/openapi+yaml", "application/problem+json"))
+
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
